@@ -1,25 +1,10 @@
-import logo from './logo.svg';
-import './App.css';
+import MiComponente from './firewall_v3.jsx'; // Cambia 'TuArchivo' por el nombre del tuyo
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div>
+      <MiComponente />
     </div>
-  );
+  )
 }
-
 export default App;

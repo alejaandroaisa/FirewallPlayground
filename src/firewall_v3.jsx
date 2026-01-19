@@ -505,13 +505,14 @@ const TUTORIAL_STEPS = [
     title: "7. Examen Final: Gestión de Crisis",
     content: "¡Emergencia! Un ataque masivo de tipo 'DDoS UDP' está ocurriendo. Tu misión: 1) Activa el ataque DDoS UDP. 2) Permite acceso SSH de emergencia (TCP 22) para admins. 3) Bloquea explícitamente el puerto DNS (UDP 53). 4) Audita (abre) un paquete UDP bloqueado en el Inspector para confirmar.",
     actionCheck: (state) => {
-      const isAttacking = state.attackMode === 'DDoS_UDP' && state.isRunning;
+      // FIX: Ya no requerimos que isRunning sea true. Si el usuario pausa para ver los logs, sigue valiendo.
+      const isAttacking = state.attackMode === 'DDoS_UDP';
 
-      // Regla 1: SSH (22) permitido (NUEVA REGLA)
-      const hasSSH = state.rules.some(r => r.port == '22' && r.protocol === 'TCP' && r.action === 'ACCEPT');
+      // Regla 1: SSH (22) permitido (NUEVA REGLA) - FIX: trim para evitar errores por espacios
+      const hasSSH = state.rules.some(r => r.port.toString().trim() === '22' && r.protocol === 'TCP' && r.action === 'ACCEPT');
 
-      // Regla 2: Bloqueo explícito de UDP 53 (NUEVA REGLA)
-      const hasBlockUDP = state.rules.some(r => r.port == '53' && r.protocol === 'UDP' && r.action === 'DROP');
+      // Regla 2: Bloqueo explícito de UDP 53 (NUEVA REGLA) - FIX: trim para evitar errores por espacios
+      const hasBlockUDP = state.rules.some(r => r.port.toString().trim() === '53' && r.protocol === 'UDP' && r.action === 'DROP');
 
       // Auditoría: El usuario debe estar mirando un paquete UDP bloqueado
       const validAudit = state.selectedPacket &&

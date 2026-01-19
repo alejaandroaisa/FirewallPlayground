@@ -23,13 +23,19 @@ import {
   Binary,
   GraduationCap,
   ChevronRight,
-  Move
+  Move,
+  Cpu,
+  Siren,
+  Clock,
+  Save,   // Nuevo icono
+  Upload  // Nuevo icono
 } from 'lucide-react';
 
 // --- Utilidades y Generadores de Datos (ORIGINALES v3) ---
 
 const PROTOCOLS = ['TCP', 'UDP', 'ICMP'];
 const ACTIONS = ['ACCEPT', 'DROP'];
+const BAN_DURATION = 10000; // Duración del bloqueo IPS en ms
 
 // Generador de MACs aleatorias
 const generateMAC = () => {
@@ -106,7 +112,8 @@ const generatePacket = (activeConnections = [], currentAttackMode = ATTACK_TYPES
     checksum: Math.floor(Math.random() * 65535).toString(16).toUpperCase()
   };
 
-  if (currentAttackMode === ATTACK_TYPES.SQL_INJECTION && Math.random() < 0.7) {
+  // MODIFICADO: Probabilidad al 30% con velocidad moderada (lógica anterior conservada)
+  if (currentAttackMode === ATTACK_TYPES.SQL_INJECTION && Math.random() < 0.3) {
     return {
       ...commonProps,
       sourceIP: generateRandomIP(true),
@@ -234,11 +241,11 @@ const PacketInspector = ({ packet, onClose }) => {
         {/* Header */}
         <div className="bg-slate-900 p-4 text-white flex justify-between items-center border-b border-slate-700">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Layers className="w-5 h-5 text-white" />
+            <div className={`p-2 rounded-lg ${packet.action === 'DROP' ? 'bg-red-600' : 'bg-green-600'}`}>
+              {packet.action === 'DROP' ? <Shield className="w-5 h-5 text-white" /> : <Layers className="w-5 h-5 text-white" />}
             </div>
             <div>
-              <h2 className="text-lg font-bold">Inspector de Paquete</h2>
+              <h2 className="text-lg font-bold">Inspector de Paquete: <span className={packet.action === 'DROP' ? 'text-red-400' : 'text-green-400'}>{packet.action}</span></h2>
               <p className="text-xs text-blue-200 font-mono">Frame {Math.floor(packet.id).toString().slice(-4)} | {packet.timestamp} | {packet.protocol}</p>
             </div>
           </div>
@@ -435,7 +442,7 @@ const PacketInspector = ({ packet, onClose }) => {
   );
 };
 
-// --- LOGICA DEL TUTORIAL (ACTUALIZADA: MODO AVANZADO) ---
+// --- LOGICA DEL TUTORIAL (ACTUALIZADA: EXAMEN FINAL DEFINITIVO) ---
 
 const TUTORIAL_STEPS = [
   {
@@ -481,7 +488,6 @@ const TUTORIAL_STEPS = [
     id: 5,
     title: "5. Análisis Forense (Inspección)",
     content: "El ataque está pasando porque el puerto 80 está abierto. Ve a 'Logs', busca una fila roja (SQL Injection) y haz DOBLE CLIC para inspeccionar el paquete.",
-    // CORREGIDO: Usamos el string legible 'SQL Injection' que es lo que realmente contiene el paquete
     actionCheck: (state) => state.activeTab === 'logs' && state.selectedPacket && state.selectedPacket.attackType === 'SQL Injection',
     tab: 'logs',
     hint: "Doble clic en cualquier fila de la tabla de logs que tenga texto rojo."
@@ -496,8 +502,31 @@ const TUTORIAL_STEPS = [
   },
   {
     id: 7,
-    title: "¡Tutorial Completado!",
-    content: "¡Excelente! Has configurado un firewall stateful con capacidad de inspección profunda de paquetes (DPI). Ahora estás listo para el modo libre.",
+    title: "7. Examen Final: Gestión de Crisis",
+    content: "¡Emergencia! Un ataque masivo de tipo 'DDoS UDP' está ocurriendo. Tu misión: 1) Activa el ataque DDoS UDP. 2) Permite acceso SSH de emergencia (TCP 22) para admins. 3) Bloquea explícitamente el puerto DNS (UDP 53). 4) Audita (abre) un paquete UDP bloqueado en el Inspector para confirmar.",
+    actionCheck: (state) => {
+      const isAttacking = state.attackMode === 'DDoS_UDP' && state.isRunning;
+
+      // Regla 1: SSH (22) permitido (NUEVA REGLA)
+      const hasSSH = state.rules.some(r => r.port == '22' && r.protocol === 'TCP' && r.action === 'ACCEPT');
+
+      // Regla 2: Bloqueo explícito de UDP 53 (NUEVA REGLA)
+      const hasBlockUDP = state.rules.some(r => r.port == '53' && r.protocol === 'UDP' && r.action === 'DROP');
+
+      // Auditoría: El usuario debe estar mirando un paquete UDP bloqueado
+      const validAudit = state.selectedPacket &&
+        state.selectedPacket.attackType === 'UDP Flood' &&
+        state.selectedPacket.action === 'DROP';
+
+      return isAttacking && hasSSH && hasBlockUDP && validAudit;
+    },
+    tab: 'logs',
+    hint: "Activa el ataque DDoS UDP, crea reglas para TCP/22 (ACCEPT) y UDP/53 (DROP). Finalmente, ve a logs y abre un paquete 'UDP Flood' rojo."
+  },
+  {
+    id: 8,
+    title: "¡Certificación Completada!",
+    content: "¡Felicidades! Has completado el entrenamiento de élite. Sabes gestionar diferentes vectores de ataque, crear reglas de emergencia y auditar forensicamente el tráfico. Eres un experto.",
     actionCheck: () => true,
     tab: 'dashboard'
   }
@@ -511,17 +540,23 @@ export default function FirewallSimulator() {
   const [defaultPolicy, setDefaultPolicy] = useState('DROP');
   const [showIntro, setShowIntro] = useState(true);
 
+  // NUEVO: Estados para Auto-Defensa (IPS) y Carga de Sistema
+  const [isAutoDefense, setIsAutoDefense] = useState(false);
+  const [systemLoad, setSystemLoad] = useState(5); // % de carga
+  const [timeNow, setTimeNow] = useState(Date.now()); // Para forzar re-render de contadores
+
   // Estados del Tutorial
   const [tutorialMode, setTutorialMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showTutorialSuccess, setShowTutorialSuccess] = useState(false);
-  const [stepComplete, setStepComplete] = useState(false); // NUEVO: Evita condiciones de carrera
+  const [stepComplete, setStepComplete] = useState(false);
 
   // Estados para arrastrar el widget
   const [tutorialPosition, setTutorialPosition] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const tutorialWidgetRef = useRef(null);
+  const fileInputRef = useRef(null); // Ref para el input de archivo
 
   const [isStateful, setIsStateful] = useState(false);
   const [connections, setConnections] = useState([]);
@@ -553,12 +588,37 @@ export default function FirewallSimulator() {
   });
 
   const stateRef = useRef({
-    rules, defaultPolicy, isStateful, connections, attackMode
+    rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense
+  });
+
+  // Refs para análisis de tráfico (IPS)
+  const trafficAnalysisRef = useRef({
+    ips: {},
+    ports: {}
   });
 
   useEffect(() => {
-    stateRef.current = { rules, defaultPolicy, isStateful, connections, attackMode };
-  }, [rules, defaultPolicy, isStateful, connections, attackMode]);
+    stateRef.current = { rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense };
+  }, [rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense]);
+
+  // --- Timer Global (para expiración reglas y UI) ---
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeNow(Date.now());
+
+      // Limpiar reglas expiradas
+      setRules(prevRules => {
+        const now = Date.now();
+        // Solo filtrar si hay alguna expirada para evitar re-renders innecesarios
+        const hasExpired = prevRules.some(r => r.expiresAt && r.expiresAt <= now);
+        if (hasExpired) {
+          return prevRules.filter(r => !r.expiresAt || r.expiresAt > now);
+        }
+        return prevRules;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // --- Efecto de Arrastre (Drag) ---
   useEffect(() => {
@@ -594,19 +654,18 @@ export default function FirewallSimulator() {
   };
 
   // --- Lógica del Tutorial (ROBUSTA) ---
-
   const startTutorial = () => {
     setTutorialMode(true);
     setCurrentStep(0);
-    setStepComplete(false); // Resetear estado de completitud
+    setStepComplete(false);
     setShowIntro(false);
-    // Resetear entorno para el tutorial
     setRules([]);
     setDefaultPolicy('ACCEPT');
     setStats({ total: 0, allowed: 0, blocked: 0, attackAttempts: 0, statefulMatches: 0 });
     setLogs([]);
     setIsRunning(false);
     setIsStateful(false);
+    setIsAutoDefense(false); // Resetear auto defensa para el tutorial
     setActiveTab('dashboard');
   };
 
@@ -615,7 +674,6 @@ export default function FirewallSimulator() {
     setShowIntro(false);
   };
 
-  // EFECTO 1: Verificar si el paso actual se ha completado
   useEffect(() => {
     if (!tutorialMode || stepComplete || currentStep >= TUTORIAL_STEPS.length) return;
 
@@ -638,32 +696,82 @@ export default function FirewallSimulator() {
     }
   }, [tutorialMode, stepComplete, currentStep, defaultPolicy, rules, activeTab, stats, isRunning, isStateful, attackMode, selectedPacket]);
 
-  // EFECTO 2: Gestionar la transición al siguiente paso (temporizador)
   useEffect(() => {
     if (stepComplete) {
-      // Mostrar éxito (excepto en el paso inicial 0)
       if (currentStep !== 0) {
         setShowTutorialSuccess(true);
         setTimeout(() => setShowTutorialSuccess(false), 2000);
       }
 
-      const delay = currentStep === 0 ? 0 : 1500;
+      const delay = currentStep === 0 ? 0 : 2500;
       const timer = setTimeout(() => {
-        // Avanzar de paso de forma segura
         setCurrentStep(prev => {
           const next = prev + 1;
-          // Doble chequeo de seguridad
           return next < TUTORIAL_STEPS.length ? next : prev;
         });
-        setStepComplete(false); // Resetear para el siguiente paso
+        setStepComplete(false);
       }, delay);
 
-      // Limpiar temporizador si el componente se desmonta o el tutorial se cancela
       return () => clearTimeout(timer);
     }
-  }, [stepComplete]); // Solo depende de stepComplete, ignorando actualizaciones de stats
+  }, [stepComplete]);
 
-  // --- Motor del Firewall (ORIGINAL v3) ---
+  // --- Lógica de Auto-Defensa (IPS) ---
+  const autoBlock = (type, value) => {
+    setRules(prevRules => {
+      // Evitar duplicados
+      const exists = prevRules.some(r =>
+        r.action === 'DROP' &&
+        ((type === 'IP' && r.sourceIP === value) || (type === 'PORT' && r.port === value.toString()))
+      );
+      if (exists) return prevRules;
+
+      const newAutoRule = {
+        id: Date.now(),
+        name: `[IPS] Auto-Block ${type} ${value}`,
+        sourceIP: type === 'IP' ? value : '*',
+        destIP: '*',
+        protocol: '*',
+        port: type === 'PORT' ? value.toString() : '*',
+        action: 'DROP',
+        expiresAt: Date.now() + BAN_DURATION, // Expiración añadida
+        content: ''
+      };
+
+      return [newAutoRule, ...prevRules]; // Añadir al principio (mayor prioridad)
+    });
+  };
+
+  // Efecto para análisis periódico de tráfico (cada 1s)
+  useEffect(() => {
+    if (!isRunning || !isAutoDefense) return;
+
+    const analysisInterval = setInterval(() => {
+      const analysis = trafficAnalysisRef.current;
+
+      // Analizar IPs (Threshold: > 3 paquetes/seg - BAJADO para que salte rápido)
+      Object.entries(analysis.ips).forEach(([ip, count]) => {
+        if (count > 3) {
+          autoBlock('IP', ip);
+        }
+      });
+
+      // Analizar Puertos (Threshold: > 8 paquetes/seg global - BAJADO para que salte rápido)
+      Object.entries(analysis.ports).forEach(([port, count]) => {
+        if (count > 8) {
+          autoBlock('PORT', port);
+        }
+      });
+
+      // Reset counters
+      trafficAnalysisRef.current = { ips: {}, ports: {} };
+    }, 1000);
+
+    return () => clearInterval(analysisInterval);
+  }, [isRunning, isAutoDefense]);
+
+
+  // --- Motor del Firewall (MODIFICADO para IPS y Carga) ---
 
   const intervalRef = useRef(null);
   const connectionTimerRef = useRef(null);
@@ -679,10 +787,19 @@ export default function FirewallSimulator() {
   };
 
   const processPacket = (packet) => {
-    const { rules, defaultPolicy, isStateful, connections } = stateRef.current;
+    const { rules, defaultPolicy, isStateful, connections, isAutoDefense } = stateRef.current;
+
+    // IPS: Actualizar contadores de tráfico
+    if (isAutoDefense) {
+      const analysis = trafficAnalysisRef.current;
+      analysis.ips[packet.sourceIP] = (analysis.ips[packet.sourceIP] || 0) + 1;
+      analysis.ports[packet.destPort] = (analysis.ports[packet.destPort] || 0) + 1;
+    }
+
     let actionTaken = defaultPolicy;
     let matchedRuleName = 'Política por Defecto';
     let isStatefulMatch = false;
+    let matchedRuleIndex = -1; // Para calcular carga
 
     if (isStateful) {
       const existingConn = connections.find(c =>
@@ -699,7 +816,8 @@ export default function FirewallSimulator() {
     }
 
     if (!isStatefulMatch) {
-      for (const rule of rules) {
+      for (let i = 0; i < rules.length; i++) {
+        const rule = rules[i];
         if (
           checkMatch(packet.sourceIP, rule.sourceIP) &&
           checkMatch(packet.destIP, rule.destIP) &&
@@ -709,10 +827,28 @@ export default function FirewallSimulator() {
         ) {
           actionTaken = rule.action;
           matchedRuleName = rule.name;
+          matchedRuleIndex = i;
           break;
         }
       }
     }
+
+    // Calculo de Carga de CPU Simulada
+    let loadImpact = 0;
+    if (stateRef.current.attackMode !== ATTACK_TYPES.NONE) {
+      // Ataque activo
+      if (matchedRuleIndex !== -1 && actionTaken === 'DROP') {
+        // Bloqueado por regla explícita: Carga baja (bueno)
+        loadImpact = 20 + (matchedRuleIndex * 2);
+      } else {
+        // Pasa hasta el final o es aceptado: Carga alta (malo si es ataque)
+        loadImpact = 95;
+      }
+    } else {
+      // Tráfico normal
+      loadImpact = 5 + (Math.random() * 10);
+    }
+    setSystemLoad(prev => Math.floor((prev * 0.7) + (loadImpact * 0.3))); // Suavizado
 
     if (isStateful && actionTaken === 'ACCEPT' && !isStatefulMatch && !packet.isReturnTraffic && packet.flags.includes('SYN')) {
       const newConn = {
@@ -720,7 +856,6 @@ export default function FirewallSimulator() {
         sourceIP: packet.sourceIP, destIP: packet.destIP,
         srcPort: packet.srcPort, destPort: packet.destPort,
         protocol: packet.protocol, ttl: 15, startTime: new Date().toLocaleTimeString(),
-        // v3 original props just in case
         sourceMAC: packet.sourceMAC
       };
       setConnections(prev => [...prev, newConn]);
@@ -738,13 +873,26 @@ export default function FirewallSimulator() {
 
   useEffect(() => {
     if (isRunning) {
-      const speed = stateRef.current.attackMode !== ATTACK_TYPES.NONE ? 300 : 1500;
+      // CONFIGURACIÓN DE VELOCIDAD DE ATAQUE
+      // DDoS/SYN: 20ms (Muy rápido, para simular saturación)
+      // SQL Injection: 800ms (Moderado, para permitir leer y capturar el paquete)
+      // Normal: 1000ms
+      let speed = 1000;
+
+      if (stateRef.current.attackMode === ATTACK_TYPES.DDoS_UDP || stateRef.current.attackMode === ATTACK_TYPES.SYN_FLOOD) {
+        speed = 20;
+      } else if (stateRef.current.attackMode === ATTACK_TYPES.SQL_INJECTION) {
+        speed = 800;
+      }
+
+      clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
         const { connections, attackMode } = stateRef.current;
         processPacket(generatePacket(connections, attackMode));
       }, speed);
     } else {
       clearInterval(intervalRef.current);
+      setSystemLoad(0);
     }
     return () => clearInterval(intervalRef.current);
   }, [isRunning, attackMode]);
@@ -777,6 +925,46 @@ export default function FirewallSimulator() {
     setRules(newRules);
   };
 
+  // --- NUEVA FUNCIONALIDAD: Guardar Configuración ---
+  const handleSaveConfig = (e) => {
+    if (e) e.preventDefault(); // CRÍTICO: Evita que la página se recargue
+    const config = {
+      rules,
+      defaultPolicy,
+      isStateful,
+      isAutoDefense
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "firewall_scenario.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  // --- NUEVA FUNCIONALIDAD: Cargar Configuración ---
+  const handleLoadConfig = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const config = JSON.parse(e.target.result);
+        if (config.rules) setRules(config.rules);
+        if (config.defaultPolicy) setDefaultPolicy(config.defaultPolicy);
+        if (config.isStateful !== undefined) setIsStateful(config.isStateful);
+        if (config.isAutoDefense !== undefined) setIsAutoDefense(config.isAutoDefense);
+        alert("Escenario cargado correctamente.");
+      } catch (err) {
+        console.error("Error parsing JSON", err);
+        alert("Archivo de configuración inválido");
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = null; // Reset input
+  };
+
   const handleManualInject = () => {
     const pkt = {
       ...manualPacket,
@@ -793,7 +981,6 @@ export default function FirewallSimulator() {
       ack_num: 0,
       window_size: 65535,
       checksum: 'MANUAL',
-      // Manual props fix
       srcPort: 5555
     };
     processPacket(pkt);
@@ -839,18 +1026,16 @@ export default function FirewallSimulator() {
     return <span className={`px-2 py-1 rounded text-xs font-bold border ${styles}`}>{type}</span>;
   };
 
-  // Safe access for tutorial steps in render
   const currentTutorialStepData = TUTORIAL_STEPS[currentStep] || TUTORIAL_STEPS[0];
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800 relative pb-32">
       <PacketInspector packet={selectedPacket} onClose={() => setSelectedPacket(null)} />
 
-      {/* --- Overlay Tutorial Widget (MODIFICADO: AHORA ES DRAGGABLE) --- */}
+      {/* --- Overlay Tutorial Widget (DRAGGABLE) --- */}
       {tutorialMode && (
         <div
           ref={tutorialWidgetRef}
-          // FIX Z-INDEX: Changed from z-50 to z-[70] to appear above the modal (which is z-[60])
           className={`fixed z-[70] w-96 animate-fade-in-up ${tutorialPosition ? '' : 'bottom-6 right-6'}`}
           style={tutorialPosition ? { left: tutorialPosition.x, top: tutorialPosition.y } : {}}
         >
@@ -861,7 +1046,6 @@ export default function FirewallSimulator() {
           )}
 
           <div className="bg-slate-900 rounded-xl shadow-2xl border-2 border-blue-500 overflow-hidden text-white">
-            {/* Header: Ahora es el asa para arrastrar */}
             <div
               className="bg-gradient-to-r from-blue-600 to-blue-800 p-3 flex justify-between items-center cursor-move select-none"
               onMouseDown={handleMouseDown}
@@ -913,7 +1097,7 @@ export default function FirewallSimulator() {
         </div>
       )}
 
-      {/* Modal Introducción (MODIFICADO PARA INCLUIR TUTORIAL) */}
+      {/* Modal Introducción */}
       {showIntro && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900 bg-opacity-90 backdrop-blur-sm p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden animate-fade-in-up">
@@ -925,7 +1109,7 @@ export default function FirewallSimulator() {
             </div>
             <div className="p-8">
               <p className="text-lg text-gray-600 mb-8 leading-relaxed">
-                Elige un modo para comenzar:
+                ¿Cómo te gustaría empezar hoy?
               </p>
               <div className="grid md:grid-cols-2 gap-6">
                 <button
@@ -969,11 +1153,28 @@ export default function FirewallSimulator() {
                 FireWall Playground {tutorialMode && <span className="bg-blue-600 text-[10px] px-2 py-0.5 rounded text-white uppercase tracking-wider">Modo Entrenamiento</span>}
                 <span className="text-xs font-normal opacity-70 border border-slate-600 px-1 rounded bg-slate-800 ml-2">by Alejandro Aisa</span>
               </h1>
-              <p className="text-xs text-gray-400">Simulador de Tráfico, DPI y Filtrado de Paquetes</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Auto Defense Toggle (IPS) */}
+            <div className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${isAutoDefense ? 'bg-orange-900 border-orange-500' : 'bg-slate-800 border-slate-700'}`}>
+              <span className={`text-xs font-bold flex items-center gap-1 ${isAutoDefense ? 'text-orange-200' : 'text-gray-300'}`}>
+                <Siren className="w-3 h-3" /> IPS Mode
+                <EduTooltip side="bottom" text="Sistema de Prevención de Intrusiones. Analiza frecuencia de paquetes y bloquea automáticamente IPs abusivas o ataques DDoS." />
+              </span>
+              <button
+                onClick={() => setIsAutoDefense(!isAutoDefense)}
+                disabled={tutorialMode}
+                className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${isAutoDefense ? 'bg-orange-500' : 'bg-gray-600'} ${tutorialMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <span className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ease-in-out ${isAutoDefense ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            <div className="h-8 w-px bg-slate-700 mx-2 hidden md:block"></div>
+
+            {/* RESTAURADO: Botón de Modo Stateful */}
             <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700">
               <span className="text-xs font-bold text-gray-300 flex items-center gap-1">
                 Modo Stateful
@@ -981,7 +1182,7 @@ export default function FirewallSimulator() {
               </span>
               <button
                 onClick={() => setIsStateful(!isStateful)}
-                disabled={tutorialMode && currentStep < 3} // Solo permitir cambiar stateful cuando toca
+                disabled={tutorialMode && currentStep < 3}
                 className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${isStateful ? 'bg-blue-500' : 'bg-gray-600'} ${tutorialMode && currentStep < 3 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <span className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ease-in-out ${isStateful ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -990,34 +1191,34 @@ export default function FirewallSimulator() {
 
             <div className="h-8 w-px bg-slate-700 mx-2 hidden md:block"></div>
 
-            <div className="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-              <span className="text-xs text-gray-400">Estado:</span>
-              {attackMode !== ATTACK_TYPES.NONE ? (
-                <span className="flex items-center gap-1 text-red-400 text-sm font-bold animate-pulse">
-                  <AlertTriangle className="w-4 h-4" /> ¡ATAQUE!
-                </span>
-              ) : isRunning ? (
-                <span className="flex items-center gap-1 text-green-400 text-sm font-bold">
-                  <Activity className="w-4 h-4 animate-pulse" /> Activo
-                </span>
-              ) : (
-                <span className="text-gray-400 text-sm">Detenido</span>
-              )}
+            {/* MODIFICADO: Contenedor unificado (Estado + Botón) para que parezca "dentro del cuadro" */}
+            <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-full border border-slate-700">
+              <div className="flex items-center gap-2 px-3">
+                <span className="text-xs text-gray-400">Estado:</span>
+                {attackMode !== ATTACK_TYPES.NONE ? (
+                  <span className="flex items-center gap-1 text-red-400 text-sm font-bold animate-pulse">
+                    <AlertTriangle className="w-4 h-4" /> ¡ATAQUE!
+                  </span>
+                ) : isRunning ? (
+                  <span className="flex items-center gap-1 text-green-400 text-sm font-bold">
+                    <Activity className="w-4 h-4 animate-pulse" /> Activo
+                  </span>
+                ) : (
+                  <span className="text-gray-400 text-sm">Detenido</span>
+                )}
+              </div>
+
+              <button
+                onClick={() => setIsRunning(!isRunning)}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-full font-bold transition-colors text-xs shadow-sm ${isRunning ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'}`}
+              >
+                {isRunning ? <><Pause className="w-3 h-3" /> Detener</> : <><Play className="w-3 h-3" /> Iniciar</>}
+              </button>
             </div>
-            <button
-              onClick={() => setIsRunning(!isRunning)}
-              className={`flex items-center gap-2 px-4 py-2 rounded font-bold transition-colors ${isRunning ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
-            >
-              {isRunning ? <><Pause className="w-4 h-4" /> Detener</> : <><Play className="w-4 h-4" /> Iniciar</>}
-            </button>
           </div>
         </div>
 
-        {attackMode !== ATTACK_TYPES.NONE && (
-          <div className="absolute top-full left-0 w-full bg-red-600 text-white text-center text-xs font-bold py-1 uppercase tracking-widest animate-pulse">
-            ⚠️ Ciberataque en curso: {attackMode} ⚠️
-          </div>
-        )}
+        {/* ELIMINADO: Banner superior de ataque en curso */}
       </header>
 
       {/* Main Content */}
@@ -1052,6 +1253,24 @@ export default function FirewallSimulator() {
         {/* VISTA: Dashboard */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {/* System Load Indicator (New Feature) */}
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-gray-600 flex items-center gap-2">
+                  <Cpu className="w-4 h-4" /> Carga del Sistema (CPU Load)
+                  <EduTooltip text="Indica cuánto esfuerzo está haciendo el firewall. Si llega al 100%, el sistema colapsa. Las reglas 'DROP' explícitas al inicio reducen la carga. La política por defecto consume más CPU." />
+                </h3>
+                <span className={`text-sm font-bold ${systemLoad > 90 ? 'text-red-600 animate-pulse' : 'text-gray-600'}`}>{systemLoad}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 ${systemLoad > 90 ? 'bg-red-600' : systemLoad > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                  style={{ width: `${systemLoad}%` }}
+                ></div>
+              </div>
+              {systemLoad > 90 && <p className="text-xs text-red-600 font-bold mt-1">⚠️ PELIGRO: Carga crítica. El firewall podría dejar de responder. Activa el IPS o crea reglas de bloqueo explícitas.</p>}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <StatCard title="Paquetes Totales" value={stats.total} color="text-blue-600" icon={Activity} />
               <StatCard title="Permitidos (ACCEPT)" value={stats.allowed} color="text-green-600" icon={Shield} />
@@ -1088,28 +1307,41 @@ export default function FirewallSimulator() {
                 </div>
               </div>
 
+              {/* LISTA DE BLOQUEOS IPS (REEMPLAZA A TIPOS DE TRÁFICO) */}
               <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
                 <h3 className="text-lg font-bold mb-4 text-gray-700 flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-orange-600" />
-                  Tipos de Tráfico Detectado
+                  <Siren className="w-5 h-5 text-red-600" />
+                  Bloqueos Activos IPS (TTL 10s)
                 </h3>
-                <div className="space-y-3">
-                  {['SQL Injection', 'UDP Flood', 'SYN Flood', 'Port Scan'].map(type => {
-                    const count = logs.filter(l => l.attackType === type).length;
-                    const width = logs.length > 0 ? (count / logs.length) * 100 : 0;
-                    return (
-                      <div key={type}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="font-bold text-gray-600">{type}</span>
-                          <span className="text-gray-400">{count} eventos</span>
+                <div className="space-y-2 overflow-y-auto max-h-64">
+                  {rules.filter(r => r.name.startsWith('[IPS]')).length > 0 ? (
+                    rules.filter(r => r.name.startsWith('[IPS]')).map(rule => {
+                      const remaining = Math.max(0, Math.ceil((rule.expiresAt - timeNow) / 1000));
+                      return (
+                        <div key={rule.id} className="flex justify-between items-center p-2 bg-red-50 border border-red-100 rounded text-xs animate-fade-in">
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-3 h-3 text-red-600" />
+                            <div>
+                              <span className="font-bold text-red-800 block">{rule.name.replace('[IPS] Auto-Block ', '')}</span>
+                              <span className="text-[10px] text-red-400">Expiración automática</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-gray-600 font-mono font-bold">{remaining}s</span>
+                            <div className="w-16 bg-red-200 rounded-full h-1 mt-1">
+                              <div className="bg-red-600 h-1 rounded-full transition-all duration-1000" style={{ width: `${(remaining / 10) * 100}%` }}></div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2">
-                          <div className="bg-orange-500 h-2 rounded-full transition-all duration-500" style={{ width: `${width}%` }}></div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {logs.filter(l => l.attackType).length === 0 && <p className="text-xs text-gray-400 text-center py-4">No se han detectado firmas de ataque aún.</p>}
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-gray-400 italic">
+                      <Shield className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                      <p>Sin bloqueos automáticos activos</p>
+                      <p className="text-[10px] mt-1">Activa el modo IPS y genera tráfico malicioso.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1120,27 +1352,62 @@ export default function FirewallSimulator() {
         {activeTab === 'rules' && (
           <div className="space-y-6">
             <div className={`bg-white p-6 rounded-lg shadow border transition-all duration-300 ${tutorialMode && currentStep === 1 ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}>
-              <div className="flex justify-between items-center mb-4 pb-4 border-b">
+
+              {/* HEADER: Política por defecto + Gestión de Escenarios */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                    Política por Defecto
-                    <EduTooltip text="Es la red de seguridad. Si un paquete NO coincide con ninguna regla de la lista inferior, se le aplicará esta acción." />
+                    Gestión de Reglas
                   </h3>
-                  <p className="text-sm text-gray-500">Qué hacer si un paquete no coincide con ninguna regla.</p>
+                  <p className="text-sm text-gray-500">Define el comportamiento y guarda tus escenarios.</p>
                 </div>
-                <div className="flex items-center bg-gray-100 p-1 rounded-lg">
-                  {ACTIONS.map(action => (
+
+                <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
+                  {/* NUEVO: Botones de Guardar/Cargar */}
+                  <div className="flex gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleLoadConfig}
+                      className="hidden"
+                      accept=".json"
+                    />
                     <button
-                      key={action}
-                      onClick={() => setDefaultPolicy(action)}
-                      className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${defaultPolicy === action
-                        ? (action === 'ACCEPT' ? 'bg-green-500 text-white' : 'bg-red-500 text-white')
-                        : 'text-gray-500 hover:bg-gray-200'
-                        }`}
+                      type="button"
+                      onClick={() => fileInputRef.current.click()}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs font-bold transition-colors border border-gray-300"
                     >
-                      {action}
+                      <Upload size={14} /> Cargar
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={handleSaveConfig}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-bold transition-colors border border-blue-200"
+                    >
+                      <Save size={14} /> Guardar
+                    </button>
+                  </div>
+
+                  <div className="w-px h-8 bg-gray-300 hidden md:block"></div>
+
+                  {/* Política por Defecto */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Política Default:</span>
+                    <div className="flex items-center bg-gray-100 p-1 rounded-lg">
+                      {ACTIONS.map(action => (
+                        <button
+                          key={action}
+                          onClick={() => setDefaultPolicy(action)}
+                          className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${defaultPolicy === action
+                            ? (action === 'ACCEPT' ? 'bg-green-500 text-white' : 'bg-red-500 text-white')
+                            : 'text-gray-500 hover:bg-gray-200'
+                            }`}
+                        >
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1167,7 +1434,17 @@ export default function FirewallSimulator() {
                     {rules.map((rule, index) => (
                       <tr key={rule.id} className="hover:bg-gray-50">
                         <td className="p-3 font-bold text-gray-400">{index + 1}</td>
-                        <td className="p-3 font-medium">{rule.name}</td>
+                        <td className="p-3 font-medium">
+                          {rule.name.startsWith('[IPS]') ?
+                            <div className="flex flex-col">
+                              <span className="flex items-center gap-1 text-orange-600"><Siren className="w-3 h-3" /> {rule.name}</span>
+                              <span className="text-[9px] text-gray-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Expira en {Math.max(0, Math.ceil((rule.expiresAt - timeNow) / 1000))}s
+                              </span>
+                            </div>
+                            : rule.name
+                          }
+                        </td>
                         <td className="p-3 font-mono text-xs">{rule.sourceIP}</td>
                         <td className="p-3">{rule.protocol}</td>
                         <td className="p-3 font-mono">{rule.port}</td>
@@ -1188,7 +1465,7 @@ export default function FirewallSimulator() {
               </div>
             </div>
 
-            <div className={`bg-blue-50 p-6 rounded-lg border transition-all duration-300 ${tutorialMode && (currentStep === 2 || currentStep === 6) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-blue-100'}`}>
+            <div className={`bg-blue-50 p-6 rounded-lg border transition-all duration-300 ${tutorialMode && (currentStep === 2 || currentStep === 6 || currentStep === 7) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-blue-100'}`}>
               <h3 className="text-md font-bold text-blue-800 mb-4 flex items-center gap-2">
                 <Plus className="w-4 h-4" /> Añadir Nueva Regla
                 <EduTooltip text="Define los criterios específicos. Un asterisco (*) significa 'cualquiera'. Usa 'Contenido' para filtrar payloads específicos." />
@@ -1307,6 +1584,8 @@ export default function FirewallSimulator() {
         {/* VISTA: Logs */}
         {activeTab === 'logs' && (
           <div className="space-y-4">
+            {/* ELIMINADO: Mensaje de alerta en la sección de logs */}
+
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
                 Registro de Tráfico

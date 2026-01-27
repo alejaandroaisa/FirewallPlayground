@@ -1,207 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Shield,
-  Play,
-  Pause,
-  Plus,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
-  Activity,
-  FileText,
-  Download,
-  AlertTriangle,
-  Settings,
-  HelpCircle,
-  RefreshCw,
-  Zap,
-  Database,
-  Globe,
-  CheckCircle,
-  X,
-  Layers,
-  Binary,
-  GraduationCap,
-  ChevronRight,
-  Move,
-  Cpu,
-  Siren,
-  Clock,
-  Save,   // Nuevo icono
-  Upload  // Nuevo icono
+  Shield, Play, Pause, Plus, Trash2, ArrowUp, ArrowDown, Activity,
+  FileText, Download, AlertTriangle, Settings, HelpCircle, RefreshCw,
+  Zap, Database, Globe, CheckCircle, X, Layers, Binary, GraduationCap,
+  ChevronRight, Move, Cpu, Siren, Clock, Save, Upload, Moon, Sun
 } from 'lucide-react';
 
-// --- Utilidades y Generadores de Datos (ORIGINALES v3) ---
+// IMPORTACIÓN DE UTILIDADES Y DATOS
+import {
+  PROTOCOLS,
+  ACTIONS,
+  BAN_DURATION,
+  SERVER_MAC,
+  ATTACK_TYPES,
+  TUTORIAL_STEPS,
+  generateMAC,
+  generatePacket,
+  generateHexDump
+} from './firewall.utils';
 
-const PROTOCOLS = ['TCP', 'UDP', 'ICMP'];
-const ACTIONS = ['ACCEPT', 'DROP'];
-const BAN_DURATION = 10000; // Duración del bloqueo IPS en ms
+import logo from './logo.png';
 
-// Generador de MACs aleatorias
-const generateMAC = () => {
-  return "XX:XX:XX:XX:XX:XX".replace(/X/g, function () {
-    return "0123456789ABCDEF".charAt(Math.floor(Math.random() * 16));
-  });
-};
-
-const SERVER_MAC = "00:50:56:C0:00:08";
-
-// Genera una IP aleatoria o una IP "sospechosa"
-const generateRandomIP = (isAttack = false) => {
-  if (isAttack) return `192.168.1.${Math.floor(Math.random() * 50) + 200}`;
-  return `192.168.1.${Math.floor(Math.random() * 100) + 1}`;
-};
-
-// Utilidad para generar datos deterministas
-const getPseudoRandom = (seed, min, max) => {
-  const x = Math.sin(seed) * 10000;
-  const rand = x - Math.floor(x);
-  return Math.floor(rand * (max - min + 1)) + min;
-};
-
-// Generador de Hex Dump simulado
-const generateHexDump = (packet) => {
-  const lines = [];
-  let currentLine = "";
-  let asciiLine = "";
-  const totalBytes = 64 + (packet.payload ? packet.payload.length : 0);
-
-  for (let i = 0; i < totalBytes; i++) {
-    const byte = getPseudoRandom(packet.id + i, 0, 255);
-    const hex = byte.toString(16).padStart(2, '0');
-    currentLine += hex + " ";
-
-    const char = (byte > 32 && byte < 126) ? String.fromCharCode(byte) : ".";
-    asciiLine += char;
-
-    if ((i + 1) % 16 === 0 || i === totalBytes - 1) {
-      if (i === totalBytes - 1) {
-        const remaining = 16 - ((i + 1) % 16);
-        if (remaining < 16) {
-          currentLine += "   ".repeat(remaining);
-        }
-      }
-      const offset = (Math.floor(i / 16) * 10).toString().padStart(4, '0');
-      lines.push(`${offset}   ${currentLine}   ${asciiLine}`);
-      currentLine = "";
-      asciiLine = "";
-    }
-  }
-  return lines;
-};
-
-// --- Tipos de Ataques (ORIGINAL v3) ---
-const ATTACK_TYPES = {
-  NONE: 'NONE',
-  SQL_INJECTION: 'SQL_INJECTION',
-  DDoS_UDP: 'DDoS_UDP',
-  SYN_FLOOD: 'SYN_FLOOD'
-};
-
-const generatePacket = (activeConnections = [], currentAttackMode = ATTACK_TYPES.NONE) => {
-  const commonProps = {
-    id: Date.now() + Math.random(),
-    timestamp: new Date().toLocaleTimeString(),
-    destIP: '10.0.0.5',
-    destMAC: SERVER_MAC,
-    ttl: 64,
-    id_ip: Math.floor(Math.random() * 65535),
-    seq_num: Math.floor(Math.random() * 4294967295),
-    ack_num: Math.floor(Math.random() * 4294967295),
-    window_size: 65535,
-    checksum: Math.floor(Math.random() * 65535).toString(16).toUpperCase()
-  };
-
-  // MODIFICADO: Probabilidad al 30% con velocidad moderada (lógica anterior conservada)
-  if (currentAttackMode === ATTACK_TYPES.SQL_INJECTION && Math.random() < 0.3) {
-    return {
-      ...commonProps,
-      sourceIP: generateRandomIP(true),
-      sourceMAC: generateMAC(),
-      protocol: 'TCP',
-      srcPort: Math.floor(Math.random() * 60000) + 1024,
-      destPort: 80,
-      isAttackSignature: true,
-      flags: 'PSH, ACK',
-      payload: "SELECT * FROM users WHERE id='1' OR '1'='1'",
-      attackType: 'SQL Injection'
-    };
-  }
-
-  if (currentAttackMode === ATTACK_TYPES.DDoS_UDP && Math.random() < 0.9) {
-    return {
-      ...commonProps,
-      sourceIP: generateRandomIP(true),
-      sourceMAC: generateMAC(),
-      protocol: 'UDP',
-      srcPort: Math.floor(Math.random() * 60000) + 1024,
-      destPort: 53,
-      isAttackSignature: true,
-      flags: '',
-      payload: '<Buffer Random Junk Data>',
-      attackType: 'UDP Flood'
-    };
-  }
-
-  if (currentAttackMode === ATTACK_TYPES.SYN_FLOOD && Math.random() < 0.8) {
-    return {
-      ...commonProps,
-      sourceIP: generateRandomIP(true),
-      sourceMAC: generateMAC(),
-      protocol: 'TCP',
-      srcPort: Math.floor(Math.random() * 60000) + 1024,
-      destPort: 443,
-      isAttackSignature: true,
-      flags: 'SYN',
-      payload: '',
-      attackType: 'SYN Flood',
-      window_size: 1024
-    };
-  }
-
-  const isResponse = activeConnections.length > 0 && Math.random() < 0.3;
-  if (isResponse) {
-    const conn = activeConnections[Math.floor(Math.random() * activeConnections.length)];
-    return {
-      ...commonProps,
-      id: Date.now() + Math.random(),
-      timestamp: new Date().toLocaleTimeString(),
-      sourceIP: conn.destIP,
-      sourceMAC: SERVER_MAC,
-      destIP: conn.sourceIP,
-      destMAC: conn.sourceMAC || generateMAC(),
-      protocol: conn.protocol,
-      srcPort: conn.destPort,
-      destPort: conn.srcPort,
-      isAttackSignature: false,
-      flags: 'ACK',
-      isReturnTraffic: true,
-      payload: 'HTTP/1.1 200 OK',
-      ttl: 128
-    };
-  }
-
-  const isAttack = Math.random() < 0.1;
-  const protocol = PROTOCOLS[Math.floor(Math.random() * PROTOCOLS.length)];
-  const commonPorts = [80, 443, 22, 21, 53, 8080];
-  const port = isAttack ? 22 : commonPorts[Math.floor(Math.random() * commonPorts.length)];
-
-  return {
-    ...commonProps,
-    sourceIP: generateRandomIP(isAttack),
-    sourceMAC: generateMAC(),
-    protocol: protocol,
-    srcPort: Math.floor(Math.random() * 60000) + 1024,
-    destPort: port,
-    isAttackSignature: isAttack,
-    flags: protocol === 'TCP' ? 'SYN' : '',
-    isReturnTraffic: false,
-    payload: isAttack ? 'SSH-2.0-OpenSSH_8.2p1' : (protocol === 'HTTP' ? 'GET /index.html HTTP/1.1' : ''),
-    attackType: isAttack ? 'Port Scan' : ''
-  };
-};
-
-// --- Componentes UI Auxiliares (ORIGINALES v3 RESTAURADOS) ---
+//Componentes UI Auxiliares
 
 const EduTooltip = ({ text, align = 'center', side = 'top' }) => {
   const positionClasses = {
@@ -221,7 +41,7 @@ const EduTooltip = ({ text, align = 'center', side = 'top' }) => {
   return (
     <span className="group/tooltip relative inline-block ml-2 cursor-help align-middle">
       <HelpCircle className="w-3 h-3 text-blue-400 hover:text-blue-600 transition-colors inline" />
-      <span className={`invisible group-hover/tooltip:visible opacity-0 group-hover/tooltip:opacity-100 transition-opacity absolute ${tooltipPos} ${positionClasses[align]} px-3 py-2 bg-slate-800 text-white text-xs rounded shadow-lg w-64 text-center z-50 pointer-events-none whitespace-normal normal-case font-normal`}>
+      <span className={`invisible group-hover/tooltip:visible opacity-0 group-hover/tooltip:opacity-100 transition-opacity absolute ${tooltipPos} ${positionClasses[align]} px-3 py-2 bg-slate-800 text-white text-xs rounded shadow-xl w-64 text-center z-[100] pointer-events-none whitespace-normal normal-case font-normal border border-slate-600 leading-snug`}>
         {text}
         <span className={`absolute ${arrowPos} ${arrowClasses[align]} border-4 border-transparent`}></span>
       </span>
@@ -229,15 +49,29 @@ const EduTooltip = ({ text, align = 'center', side = 'top' }) => {
   );
 };
 
-// --- PACKET INSPECTOR COMPLETO (RESTAURADO v3) ---
-const PacketInspector = ({ packet, onClose }) => {
+//Inspector de paquetes
+const PacketInspector = ({ packet, onClose, darkMode }) => {
   if (!packet) return null;
 
   const hexDump = generateHexDump(packet);
 
+  // Cálculos reales de longitudes
+  const ipHeaderLen = 20; // 20 bytes (sin opciones)
+  const l4HeaderLen = packet.protocol === 'TCP' ? 20 : packet.protocol === 'UDP' ? 8 : 8; // TCP min 20, UDP 8, ICMP 8
+  const payloadLen = packet.payload ? packet.payload.length : 0;
+  const ipTotalLength = ipHeaderLen + l4HeaderLen + payloadLen;
+
+  // Estilos dinámicos para modo oscuro en el inspector
+  const modalBg = darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200';
+  const textMain = darkMode ? 'text-gray-200' : 'text-gray-800';
+  const textSub = darkMode ? 'text-gray-400' : 'text-gray-500';
+  const sectionBg = darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200';
+  const contentBg = darkMode ? 'bg-slate-950 border-slate-800' : 'bg-gray-50 border-gray-100';
+  const summaryHover = darkMode ? 'hover:bg-slate-800' : 'hover:bg-gray-50';
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm p-4 animate-fade-in font-sans">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className={`rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh] border ${modalBg}`}>
         {/* Header */}
         <div className="bg-slate-900 p-4 text-white flex justify-between items-center border-b border-slate-700">
           <div className="flex items-center gap-3">
@@ -255,153 +89,219 @@ const PacketInspector = ({ packet, onClose }) => {
         </div>
 
         {/* Content - Scrollable */}
-        <div className="overflow-y-auto p-0 bg-gray-50 flex-1">
+        <div className={`overflow-y-auto p-0 flex-1 ${darkMode ? 'bg-slate-950' : 'bg-gray-50'}`}>
 
           {/* Layer 2: Ethernet */}
-          <details open className="border-b border-gray-200 bg-white">
-            <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 flex items-center justify-between select-none">
-              <div className="font-bold text-sm text-gray-800 flex items-center gap-2">
+          <details open className={`border-b ${sectionBg}`}>
+            <summary className={`px-4 py-2 cursor-pointer ${summaryHover} flex items-center justify-between select-none`}>
+              <div className={`font-bold text-sm ${textMain} flex items-center gap-2`}>
                 <span className="bg-gray-700 text-white text-[10px] px-1.5 rounded font-mono">L2</span>
                 Ethernet II (Capa de Enlace)
               </div>
               <span className="text-xs text-gray-400">14 bytes</span>
             </summary>
-            <div className="px-6 py-3 bg-gray-50 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 border-t border-gray-100">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Destino <EduTooltip text="La dirección física (tarjeta de red) hacia donde va el paquete en la red local (LAN)." />:</span>
+            <div className={`px-6 py-3 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 border-t ${contentBg}`}>
+              {/* Columna Izquierda */}
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Destino
+                  <EduTooltip align="left" side="bottom" text="Dirección MAC (física) de la tarjeta de red que recibe los pulsos eléctricos." />:
+                </span>
                 <span>{packet.destMAC}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Origen <EduTooltip text="La dirección física de quien envió el paquete en la red local." />:</span>
+
+              {/* Columna Derecha */}
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Origen
+                  <EduTooltip align="right" side="bottom" text="Dirección MAC (física) del dispositivo que puso este paquete en el cable." />:
+                </span>
                 <span>{packet.sourceMAC}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Tipo <EduTooltip text="Indica qué protocolo de Capa 3 viene dentro (0x0800 es IPv4)." />:</span>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Tipo
+                  <EduTooltip align="left" side="bottom" text="Hexadecimal (0x0800) que dice 'Lo que hay dentro es un paquete IPv4'." />:
+                </span>
                 <span>IPv4 (0x0800)</span>
               </div>
-            </div>
-            <div className="bg-yellow-50 px-4 py-2 text-xs text-yellow-800 border-t border-yellow-100 italic">
-              <strong>Nota Educativa:</strong> Las direcciones MAC solo sirven para moverse "salto a salto" dentro de la misma red física (cables/wifi).
             </div>
           </details>
 
           {/* Layer 3: IP */}
-          <details open className="border-b border-gray-200 bg-white">
-            <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 flex items-center justify-between select-none">
-              <div className="font-bold text-sm text-gray-800 flex items-center gap-2">
+          <details open className={`border-b ${sectionBg}`}>
+            <summary className={`px-4 py-2 cursor-pointer ${summaryHover} flex items-center justify-between select-none`}>
+              <div className={`font-bold text-sm ${textMain} flex items-center gap-2`}>
                 <span className="bg-blue-600 text-white text-[10px] px-1.5 rounded font-mono">L3</span>
                 Internet Protocol v4 (Capa de Red)
               </div>
               <span className="text-xs text-gray-400">20 bytes</span>
             </summary>
-            <div className="px-6 py-3 bg-gray-50 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 border-t border-gray-100">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Versión <EduTooltip text="Generalmente 4 (IPv4) o 6 (IPv6)." />:</span>
+            <div className={`px-6 py-3 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 border-t ${contentBg}`}>
+
+              {/* Columna Izquierda */}
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Versión:
+                  <EduTooltip align="left" text="4 para IPv4. Si fuera 6, la estructura de la cabecera sería totalmente distinta." />
+                </span>
                 <span>4</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Longitud Total <EduTooltip text="Tamaño total del paquete IP incluyendo encabezado y datos." />:</span>
-                <span>{40 + (packet.payload ? packet.payload.length : 0)}</span>
+
+              {/* Columna Derecha */}
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Longitud Total
+                  <EduTooltip align="right" text="Suma total de bytes: Cabecera IP (20) + Cabecera TCP/UDP + Datos del payload." />:
+                </span>
+                <span className="font-bold">{ipTotalLength} bytes</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Identificación <EduTooltip text="Número único para rearmar el paquete si se fragmenta en trozos." />:</span>
-                <span>0x{packet.id_ip ? packet.id_ip.toString(16) : '1A2B'}</span>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Identificación:
+                  <EduTooltip align="left" text="ID único usado para rearmar el paquete si este es fragmentado en trozos más pequeños por el camino." />
+                </span>
+                <span>0x{packet.id_ip ? packet.id_ip.toString(16).padStart(4, '0').toUpperCase() : '0000'}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">TTL (Time to Live) <EduTooltip text="Cuenta atrás de 'vidas'. Disminuye en cada router. Si llega a 0, el paquete muere (evita bucles infinitos)." />:</span>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  TTL (Time to Live):
+                  <EduTooltip align="right" text="Contador de 'saltos'. Cada router lo baja en 1. Si llega a 0, el paquete muere (evita bucles infinitos)." />
+                </span>
                 <span>{packet.ttl}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Protocolo <EduTooltip text="Define qué hay en la capa superior (6=TCP, 17=UDP, 1=ICMP)." />:</span>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Protocolo:
+                  <EduTooltip align="left" text="Indica qué intérprete usar para la siguiente capa. 6=TCP, 17=UDP, 1=ICMP." />
+                </span>
                 <span>{packet.protocol} ({packet.protocol === 'TCP' ? 6 : packet.protocol === 'UDP' ? 17 : 1})</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">IP Origen <EduTooltip text="Dirección lógica de quien envía el mensaje en Internet." />:</span>
+
+              <div className="flex justify-between items-center md:col-start-2">
+                {/* Espaciador */}
+              </div>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  IP Origen:
+                  <EduTooltip align="left" text="Dirección lógica (como una dirección postal) de quién envía el mensaje en Internet." />
+                </span>
                 <span className="font-bold">{packet.sourceIP}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">IP Destino <EduTooltip text="Dirección lógica final a donde debe llegar el mensaje." />:</span>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  IP Destino:
+                  <EduTooltip align="right" text="Dirección lógica final hacia donde debe enrutarse este paquete." />
+                </span>
                 <span className="font-bold">{packet.destIP}</span>
               </div>
-            </div>
-            <div className="bg-yellow-50 px-4 py-2 text-xs text-yellow-800 border-t border-yellow-100 italic">
-              <strong>Nota Educativa:</strong> A diferencia de la MAC, la IP permite que el paquete viaje por todo el mundo a través de routers.
             </div>
           </details>
 
           {/* Layer 4: Transport */}
-          <details open className="border-b border-gray-200 bg-white">
-            <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 flex items-center justify-between select-none">
-              <div className="font-bold text-sm text-gray-800 flex items-center gap-2">
+          <details open className={`border-b ${sectionBg}`}>
+            <summary className={`px-4 py-2 cursor-pointer ${summaryHover} flex items-center justify-between select-none`}>
+              <div className={`font-bold text-sm ${textMain} flex items-center gap-2`}>
                 <span className="bg-purple-600 text-white text-[10px] px-1.5 rounded font-mono">L4</span>
-                {packet.protocol === 'TCP' ? 'Transmission Control Protocol' : 'User Datagram Protocol'} (Capa de Transporte)
+                {packet.protocol === 'TCP' ? 'Transmission Control Protocol' : packet.protocol === 'UDP' ? 'User Datagram Protocol' : 'ICMP'} (Capa de Transporte)
               </div>
-              <span className="text-xs text-gray-400">{packet.protocol === 'TCP' ? '32 bytes' : '8 bytes'}</span>
+              <span className="text-xs text-gray-400">{l4HeaderLen} bytes</span>
             </summary>
-            <div className="px-6 py-3 bg-gray-50 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 border-t border-gray-100">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Puerto Origen <EduTooltip text="Puerta de salida de la aplicación en el ordenador emisor (aleatorio en clientes)." />:</span>
+            <div className={`px-6 py-3 text-xs font-mono grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 border-t ${contentBg}`}>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Puerto Origen:
+                  <EduTooltip align="left" text="Canal de salida. En clientes suele ser un número alto aleatorio (ej: 54321)." />
+                </span>
                 <span>{packet.srcPort}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Puerto Destino <EduTooltip text="Puerta de entrada en el servidor. Define el servicio (80=Web, 22=SSH)." />:</span>
-                <span className="font-bold text-purple-700">{packet.destPort}</span>
+
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Puerto Destino:
+                  <EduTooltip align="right" text="Canal de servicio específico (ej: 80=Web, 22=SSH). Define qué aplicación recibirá los datos." />
+                </span>
+                <span className={`font-bold ${darkMode ? 'text-purple-400' : 'text-purple-700'}`}>{packet.destPort}</span>
               </div>
 
               {packet.protocol === 'TCP' && (
                 <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 flex items-center gap-1">Sequence Number <EduTooltip text="Número para ordenar los paquetes si llegan desordenados." />:</span>
+                  <div className={`flex justify-between items-center ${textMain}`}>
+                    <span className={`${textSub} flex items-center gap-1`}>
+                      Sequence Number:
+                      <EduTooltip align="left" text="Número para ordenar los trozos de datos si llegan desordenados." />
+                    </span>
                     <span>{packet.seq_num || 0}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 flex items-center gap-1">Ack Number <EduTooltip text="Confirma qué byte se espera recibir a continuación." />:</span>
+                  <div className={`flex justify-between items-center ${textMain}`}>
+                    <span className={`${textSub} flex items-center gap-1`}>
+                      Ack Number:
+                      <EduTooltip align="right" text="Acuse de recibo. Dice 'He recibido todo hasta el byte X, mándame el siguiente'." />
+                    </span>
                     <span>{packet.ack_num || 0}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 flex items-center gap-1">Flags <EduTooltip text="Banderas de control: SYN (conectar), ACK (confirmar), FIN (terminar), RST (error)." />:</span>
-                    <span className="font-bold text-gray-700">{packet.flags}</span>
+                  <div className={`flex justify-between items-center ${textMain}`}>
+                    <span className={`${textSub} flex items-center gap-1`}>
+                      Flags:
+                      <EduTooltip align="left" text="Banderas de control: SYN (conectar), ACK (confirmar), FIN (terminar), PSH (enviar datos)." />
+                    </span>
+                    <span className={`font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{packet.flags}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 flex items-center gap-1">Window Size <EduTooltip text="Control de flujo: Cuántos datos puede recibir el destinatario antes de saturarse." />:</span>
+                  <div className={`flex justify-between items-center ${textMain}`}>
+                    <span className={`${textSub} flex items-center gap-1`}>
+                      Window Size:
+                      <EduTooltip align="right" text="Control de flujo. Dice 'tengo X espacio libre en mi memoria, no me envíes más que eso'." />
+                    </span>
                     <span>{packet.window_size || 65535}</span>
                   </div>
                 </>
               )}
               {packet.protocol === 'UDP' && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500 flex items-center gap-1">Length <EduTooltip text="Longitud del datagrama UDP." />:</span>
-                  <span>{8 + (packet.payload ? packet.payload.length : 0)}</span>
+                <div className={`flex justify-between items-center ${textMain}`}>
+                  <span className={`${textSub} flex items-center gap-1`}>
+                    Length (Header+Data):
+                    <EduTooltip align="left" text="UDP es simple: solo dice cuánto mide el mensaje completo. No hay acuses de recibo." />
+                  </span>
+                  <span>{8 + payloadLen} bytes</span>
                 </div>
               )}
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 flex items-center gap-1">Checksum <EduTooltip text="Suma de verificación para detectar errores en los datos." />:</span>
+              <div className={`flex justify-between items-center ${textMain}`}>
+                <span className={`${textSub} flex items-center gap-1`}>
+                  Checksum:
+                  {/* FIX: Lógica condicional para evitar desbordamiento. Si es UDP, está a la derecha (align right). Si es TCP, está a la izquierda (align left). */}
+                  <EduTooltip align={packet.protocol === 'UDP' ? 'right' : 'left'} text="Suma matemática para verificar que ningún bit se corrompió por ruido eléctrico en el camino." />
+                </span>
                 <span>0x{packet.checksum || 'FAKE'}</span>
               </div>
-            </div>
-            <div className="bg-yellow-50 px-4 py-2 text-xs text-yellow-800 border-t border-yellow-100 italic">
-              <strong>Nota Educativa:</strong> Esta capa se encarga de que los datos lleguen a la aplicación correcta (gracias a los puertos) y de forma fiable (si es TCP).
             </div>
           </details>
 
           {/* Layer 7: Application / Hex Dump */}
-          <details open className="border-b border-gray-200 bg-white">
-            <summary className="px-4 py-2 cursor-pointer hover:bg-gray-50 flex items-center justify-between select-none">
-              <div className="font-bold text-sm text-gray-800 flex items-center gap-2">
+          <details open className={`border-b ${sectionBg}`}>
+            <summary className={`px-4 py-2 cursor-pointer ${summaryHover} flex items-center justify-between select-none`}>
+              <div className={`font-bold text-sm ${textMain} flex items-center gap-2`}>
                 <span className="bg-orange-600 text-white text-[10px] px-1.5 rounded font-mono">Data</span>
                 Capa de Aplicación / Datos (Payload)
               </div>
-              <span className="text-xs text-gray-400">{packet.payload ? packet.payload.length : 0} bytes</span>
+              <span className="text-xs text-gray-400">{payloadLen} bytes</span>
             </summary>
 
-            <div className="p-4 bg-gray-50 border-t border-gray-100">
-              {/* ASCII Representation */}
+            <div className={`p-4 border-t ${contentBg}`}>
+              {/* Hexadecimal*/}
               {packet.payload && (
                 <div className="mb-4">
                   <p className="text-xs text-gray-500 uppercase mb-1 font-bold flex items-center gap-1">
-                    Payload (Texto Legible) <EduTooltip text="El mensaje real que envía el usuario (ej. comando SQL, página web)." />
+                    Payload (Texto Legible)
+                    <EduTooltip align="center" text="La información útil para el usuario (HTML, JSON, Comandos) decodificada a texto ASCII." />
                   </p>
-                  <div className="bg-white border border-gray-200 p-2 rounded text-xs font-mono text-green-700 break-all shadow-inner">
+                  <div className={`border p-2 rounded text-xs font-mono break-all shadow-inner ${darkMode ? 'bg-slate-900 border-slate-700 text-green-400' : 'bg-white border-gray-200 text-green-700'}`}>
                     {packet.payload}
                   </div>
                 </div>
@@ -412,9 +312,9 @@ const PacketInspector = ({ packet, onClose }) => {
                 <div className="flex justify-between items-end mb-1">
                   <p className="text-xs text-gray-500 uppercase font-bold flex items-center gap-1">
                     <Binary className="w-3 h-3" /> Vista Hexadecimal (Raw)
-                    <EduTooltip text="Así ve el ordenador los datos: números hexadecimales. A la derecha ves su traducción a texto." />
+                    <EduTooltip align="center" side="top" text="Vista real de los bytes que viajan por el cable. La columna izq es la posición, la central son los bytes en hex, la derecha es su representación ASCII." />
                   </p>
-                  {packet.attackType === 'SQL Injection' && <span className="text-[10px] text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded border border-red-100">MALICIOUS PAYLOAD DETECTED</span>}
+                  {packet.attackType === 'SQL Injection' && <span className={`text-[10px] text-red-600 font-bold px-2 py-0.5 rounded border ${darkMode ? 'bg-red-900/30 border-red-900' : 'bg-red-50 border-red-100'}`}>MALICIOUS PAYLOAD DETECTED</span>}
                 </div>
                 <div className="bg-slate-900 text-gray-300 p-3 rounded font-mono text-[10px] leading-relaxed shadow-inner overflow-x-auto selection:bg-blue-500 selection:text-white">
                   {hexDump.map((line, i) => (
@@ -432,8 +332,8 @@ const PacketInspector = ({ packet, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-100 p-3 border-t border-gray-200 text-right">
-          <button onClick={onClose} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-6 rounded text-sm transition-colors shadow-sm">
+        <div className={`p-3 border-t text-right ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-gray-100 border-gray-200'}`}>
+          <button onClick={onClose} className={`font-bold py-2 px-6 rounded text-sm transition-colors shadow-sm ${darkMode ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-slate-800 hover:bg-slate-900 text-white'}`}>
             Cerrar
           </button>
         </div>
@@ -442,98 +342,7 @@ const PacketInspector = ({ packet, onClose }) => {
   );
 };
 
-// --- LOGICA DEL TUTORIAL (ACTUALIZADA: EXAMEN FINAL DEFINITIVO) ---
-
-const TUTORIAL_STEPS = [
-  {
-    id: 0,
-    title: "Bootcamp de Ciberseguridad",
-    content: "Aprenderás a proteger un servidor desde cero. El entrenamiento incluye: Reglas básicas, Stateful Inspection y defensa contra ataques de Inyección SQL usando DPI.",
-    actionCheck: () => true,
-    tab: 'dashboard'
-  },
-  {
-    id: 1,
-    title: "1. La Regla de Oro",
-    content: "En seguridad, lo que no está permitido está prohibido. Ve a la pestaña 'Reglas' y cambia la Política por Defecto a DROP para cerrar todo acceso.",
-    actionCheck: (state) => state.defaultPolicy === 'DROP' && state.activeTab === 'rules',
-    tab: 'rules',
-    hint: "Busca los botones arriba a la derecha en la pestaña Reglas."
-  },
-  {
-    id: 2,
-    title: "2. Abrir Servicio Web",
-    content: "El servidor necesita servir páginas web. Añade una regla para aceptar tráfico TCP en el puerto 80 (HTTP).",
-    actionCheck: (state) => state.rules.some(r => r.port == '80' && r.protocol === 'TCP' && r.action === 'ACCEPT'),
-    tab: 'rules',
-    hint: "Usa el formulario inferior. Puerto: 80, Protocolo: TCP, Acción: ACCEPT."
-  },
-  {
-    id: 3,
-    title: "3. Memoria de Conexión (Stateful)",
-    content: "El firewall está bloqueando las respuestas del servidor porque no 'recuerda' las peticiones. Activa el 'Modo Stateful' en la barra superior para permitir respuestas automáticamente.",
-    actionCheck: (state) => state.isStateful === true,
-    tab: 'dashboard',
-    hint: "Busca el interruptor 'Modo Stateful' en la barra superior azul oscura."
-  },
-  {
-    id: 4,
-    title: "4. Simular un Ciberataque",
-    content: "Es hora de probar las defensas. Ve a la pestaña 'Simulador' y activa el ataque 'SQL Injection'.",
-    actionCheck: (state) => state.activeTab === 'simulate' && state.attackMode === 'SQL_INJECTION',
-    tab: 'simulate',
-    hint: "Haz clic en el panel rojo 'SQL Injection Attack'."
-  },
-  {
-    id: 5,
-    title: "5. Análisis Forense (Inspección)",
-    content: "El ataque está pasando porque el puerto 80 está abierto. Ve a 'Logs', busca una fila roja (SQL Injection) y haz DOBLE CLIC para inspeccionar el paquete.",
-    actionCheck: (state) => state.activeTab === 'logs' && state.selectedPacket && state.selectedPacket.attackType === 'SQL Injection',
-    tab: 'logs',
-    hint: "Doble clic en cualquier fila de la tabla de logs que tenga texto rojo."
-  },
-  {
-    id: 6,
-    title: "6. Defensa Profunda (DPI)",
-    content: "Viste el comando 'SELECT' en el inspector? Eso es una inyección. Crea una regla nueva que tenga Contenido: 'SELECT' y Acción: DROP para bloquear este patrón.",
-    actionCheck: (state) => state.rules.some(r => r.content.toUpperCase().includes('SELECT') && r.action === 'DROP'),
-    tab: 'rules',
-    hint: "Usa el campo 'Contenido (DPI)' en el formulario de reglas."
-  },
-  {
-    id: 7,
-    title: "7. Examen Final: Gestión de Crisis",
-    content: "¡Emergencia! Un ataque masivo de tipo 'DDoS UDP' está ocurriendo. Tu misión: 1) Activa el ataque DDoS UDP. 2) Permite acceso SSH de emergencia (TCP 22) para admins. 3) Bloquea explícitamente el puerto DNS (UDP 53). 4) Audita (abre) un paquete UDP bloqueado en el Inspector para confirmar.",
-    actionCheck: (state) => {
-      // FIX: Ya no requerimos que isRunning sea true. Si el usuario pausa para ver los logs, sigue valiendo.
-      const isAttacking = state.attackMode === 'DDoS_UDP';
-
-      // Regla 1: SSH (22) permitido (NUEVA REGLA) - FIX: trim para evitar errores por espacios
-      const hasSSH = state.rules.some(r => r.port.toString().trim() === '22' && r.protocol === 'TCP' && r.action === 'ACCEPT');
-
-      // Regla 2: Bloqueo explícito de UDP 53 (NUEVA REGLA) - FIX: trim para evitar errores por espacios
-      const hasBlockUDP = state.rules.some(r => r.port.toString().trim() === '53' && r.protocol === 'UDP' && r.action === 'DROP');
-
-      // Auditoría: El usuario debe estar mirando un paquete UDP bloqueado
-      const validAudit = state.selectedPacket &&
-        state.selectedPacket.attackType === 'UDP Flood' &&
-        state.selectedPacket.action === 'DROP';
-
-      return isAttacking && hasSSH && hasBlockUDP && validAudit;
-    },
-    tab: 'logs',
-    hint: "Activa el ataque DDoS UDP, crea reglas para TCP/22 (ACCEPT) y UDP/53 (DROP). Finalmente, ve a logs y abre un paquete 'UDP Flood' rojo."
-  },
-  {
-    id: 8,
-    title: "¡Certificación Completada!",
-    content: "¡Felicidades! Has completado el entrenamiento de élite. Sabes gestionar diferentes vectores de ataque, crear reglas de emergencia y auditar forensicamente el tráfico. Eres un experto.",
-    actionCheck: () => true,
-    tab: 'dashboard'
-  }
-];
-
-// --- Componente Principal ---
+//Componente Principal
 
 export default function FirewallSimulator() {
   const [isRunning, setIsRunning] = useState(false);
@@ -541,23 +350,26 @@ export default function FirewallSimulator() {
   const [defaultPolicy, setDefaultPolicy] = useState('DROP');
   const [showIntro, setShowIntro] = useState(true);
 
-  // NUEVO: Estados para Auto-Defensa (IPS) y Carga de Sistema
-  const [isAutoDefense, setIsAutoDefense] = useState(false);
-  const [systemLoad, setSystemLoad] = useState(5); // % de carga
-  const [timeNow, setTimeNow] = useState(Date.now()); // Para forzar re-render de contadores
+  //Estado para Modo Oscuro
+  const [darkMode, setDarkMode] = useState(false);
 
-  // Estados del Tutorial
+  //Estados para Auto-Defensa (IPS) y Carga de Sistema
+  const [isAutoDefense, setIsAutoDefense] = useState(false);
+  const [systemLoad, setSystemLoad] = useState(5);
+  const [timeNow, setTimeNow] = useState(Date.now());
+
+  //Estados del Tutorial
   const [tutorialMode, setTutorialMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showTutorialSuccess, setShowTutorialSuccess] = useState(false);
   const [stepComplete, setStepComplete] = useState(false);
 
-  // Estados para arrastrar el widget
+  //Estados para arrastrar el widget
   const [tutorialPosition, setTutorialPosition] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const tutorialWidgetRef = useRef(null);
-  const fileInputRef = useRef(null); // Ref para el input de archivo
+  const fileInputRef = useRef(null);
 
   const [isStateful, setIsStateful] = useState(false);
   const [connections, setConnections] = useState([]);
@@ -592,7 +404,7 @@ export default function FirewallSimulator() {
     rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense
   });
 
-  // Refs para análisis de tráfico (IPS)
+  //Refs para análisis de tráfico
   const trafficAnalysisRef = useRef({
     ips: {},
     ports: {}
@@ -602,7 +414,7 @@ export default function FirewallSimulator() {
     stateRef.current = { rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense };
   }, [rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense]);
 
-  // --- Timer Global (para expiración reglas y UI) ---
+  //Timer Global (para expiración reglas y UI)
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeNow(Date.now());
@@ -621,7 +433,7 @@ export default function FirewallSimulator() {
     return () => clearInterval(timer);
   }, []);
 
-  // --- Efecto de Arrastre (Drag) ---
+  //Efecto de arrastre de la ventana del tutorial
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (isDragging) {
@@ -654,7 +466,7 @@ export default function FirewallSimulator() {
     }
   };
 
-  // --- Lógica del Tutorial (ROBUSTA) ---
+  //Lógica del tutorial
   const startTutorial = () => {
     setTutorialMode(true);
     setCurrentStep(0);
@@ -666,7 +478,7 @@ export default function FirewallSimulator() {
     setLogs([]);
     setIsRunning(false);
     setIsStateful(false);
-    setIsAutoDefense(false); // Resetear auto defensa para el tutorial
+    setIsAutoDefense(false);
     setActiveTab('dashboard');
   };
 
@@ -717,7 +529,7 @@ export default function FirewallSimulator() {
     }
   }, [stepComplete]);
 
-  // --- Lógica de Auto-Defensa (IPS) ---
+  //Lógica de Auto-Defensa (IPS)
   const autoBlock = (type, value) => {
     setRules(prevRules => {
       // Evitar duplicados
@@ -735,7 +547,7 @@ export default function FirewallSimulator() {
         protocol: '*',
         port: type === 'PORT' ? value.toString() : '*',
         action: 'DROP',
-        expiresAt: Date.now() + BAN_DURATION, // Expiración añadida
+        expiresAt: Date.now() + BAN_DURATION,
         content: ''
       };
 
@@ -750,21 +562,20 @@ export default function FirewallSimulator() {
     const analysisInterval = setInterval(() => {
       const analysis = trafficAnalysisRef.current;
 
-      // Analizar IPs (Threshold: > 3 paquetes/seg - BAJADO para que salte rápido)
+      // Analizar IPs
       Object.entries(analysis.ips).forEach(([ip, count]) => {
         if (count > 3) {
           autoBlock('IP', ip);
         }
       });
 
-      // Analizar Puertos (Threshold: > 8 paquetes/seg global - BAJADO para que salte rápido)
+      // Analizar Puertos
       Object.entries(analysis.ports).forEach(([port, count]) => {
         if (count > 8) {
           autoBlock('PORT', port);
         }
       });
 
-      // Reset counters
       trafficAnalysisRef.current = { ips: {}, ports: {} };
     }, 1000);
 
@@ -772,7 +583,7 @@ export default function FirewallSimulator() {
   }, [isRunning, isAutoDefense]);
 
 
-  // --- Motor del Firewall (MODIFICADO para IPS y Carga) ---
+  //Motor del Firewall
 
   const intervalRef = useRef(null);
   const connectionTimerRef = useRef(null);
@@ -800,7 +611,7 @@ export default function FirewallSimulator() {
     let actionTaken = defaultPolicy;
     let matchedRuleName = 'Política por Defecto';
     let isStatefulMatch = false;
-    let matchedRuleIndex = -1; // Para calcular carga
+    let matchedRuleIndex = -1;
 
     if (isStateful) {
       const existingConn = connections.find(c =>
@@ -839,17 +650,17 @@ export default function FirewallSimulator() {
     if (stateRef.current.attackMode !== ATTACK_TYPES.NONE) {
       // Ataque activo
       if (matchedRuleIndex !== -1 && actionTaken === 'DROP') {
-        // Bloqueado por regla explícita: Carga baja (bueno)
+        // Bloqueado por regla explícita: Carga baja
         loadImpact = 20 + (matchedRuleIndex * 2);
       } else {
-        // Pasa hasta el final o es aceptado: Carga alta (malo si es ataque)
+        // Pasa hasta el final o es aceptado: Carga alta
         loadImpact = 95;
       }
     } else {
       // Tráfico normal
       loadImpact = 5 + (Math.random() * 10);
     }
-    setSystemLoad(prev => Math.floor((prev * 0.7) + (loadImpact * 0.3))); // Suavizado
+    setSystemLoad(prev => Math.floor((prev * 0.7) + (loadImpact * 0.3)));
 
     if (isStateful && actionTaken === 'ACCEPT' && !isStatefulMatch && !packet.isReturnTraffic && packet.flags.includes('SYN')) {
       const newConn = {
@@ -874,12 +685,7 @@ export default function FirewallSimulator() {
 
   useEffect(() => {
     if (isRunning) {
-      // CONFIGURACIÓN DE VELOCIDAD DE ATAQUE
-      // DDoS/SYN: 20ms (Muy rápido, para simular saturación)
-      // SQL Injection: 800ms (Moderado, para permitir leer y capturar el paquete)
-      // Normal: 1000ms
       let speed = 1000;
-
       if (stateRef.current.attackMode === ATTACK_TYPES.DDoS_UDP || stateRef.current.attackMode === ATTACK_TYPES.SYN_FLOOD) {
         speed = 20;
       } else if (stateRef.current.attackMode === ATTACK_TYPES.SQL_INJECTION) {
@@ -907,7 +713,7 @@ export default function FirewallSimulator() {
     return () => clearInterval(connectionTimerRef.current);
   }, [isRunning, isStateful]);
 
-  // --- Manejadores de UI ---
+  //Manejadores de UI
   const handleAddRule = () => {
     if (!newRule.name) return alert("Nombre de regla requerido");
     setRules([...rules, { ...newRule, id: Date.now() }]);
@@ -926,9 +732,8 @@ export default function FirewallSimulator() {
     setRules(newRules);
   };
 
-  // --- NUEVA FUNCIONALIDAD: Guardar Configuración ---
   const handleSaveConfig = (e) => {
-    if (e) e.preventDefault(); // CRÍTICO: Evita que la página se recargue
+    if (e) e.preventDefault();
     const config = {
       rules,
       defaultPolicy,
@@ -944,7 +749,6 @@ export default function FirewallSimulator() {
     downloadAnchorNode.remove();
   };
 
-  // --- NUEVA FUNCIONALIDAD: Cargar Configuración ---
   const handleLoadConfig = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -963,7 +767,7 @@ export default function FirewallSimulator() {
       }
     };
     reader.readAsText(file);
-    event.target.value = null; // Reset input
+    event.target.value = null;
   };
 
   const handleManualInject = () => {
@@ -1008,9 +812,9 @@ export default function FirewallSimulator() {
   };
 
   const StatCard = ({ title, value, color, icon: Icon, tooltip }) => (
-    <div className="bg-white p-4 rounded-lg shadow border border-gray-200 flex items-center justify-between">
+    <div className={`p-4 rounded-lg shadow border flex items-center justify-between ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
       <div>
-        <div className="text-sm text-gray-500 font-medium flex items-center">
+        <div className={`text-sm font-medium flex items-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
           {title}
           {tooltip && <EduTooltip text={tooltip} />}
         </div>
@@ -1023,17 +827,34 @@ export default function FirewallSimulator() {
   );
 
   const Badge = ({ type }) => {
-    const styles = type === 'ACCEPT' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200';
+    const styles = type === 'ACCEPT'
+      ? (darkMode ? 'bg-green-900/30 text-green-400 border-green-900' : 'bg-green-100 text-green-800 border-green-200')
+      : (darkMode ? 'bg-red-900/30 text-red-400 border-red-900' : 'bg-red-100 text-red-800 border-red-200');
     return <span className={`px-2 py-1 rounded text-xs font-bold border ${styles}`}>{type}</span>;
   };
 
   const currentTutorialStepData = TUTORIAL_STEPS[currentStep] || TUTORIAL_STEPS[0];
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-800 relative pb-32">
-      <PacketInspector packet={selectedPacket} onClose={() => setSelectedPacket(null)} />
+    <div className={`min-h-screen font-sans relative pb-32 transition-colors duration-300 ${darkMode ? 'bg-slate-950 text-gray-100' : 'bg-gray-50 text-gray-800'}`}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Source+Code+Pro:wght@400;600;700&display=swap');
+        
+        :root {
+          --font-ui: 'Share Tech Mono', monospace;
+          --font-code: 'Source Code Pro', monospace;
+        }
 
-      {/* --- Overlay Tutorial Widget (DRAGGABLE) --- */}
+        /* Override Tailwind defaults for this component */
+        .font-sans, body { font-family: var(--font-ui) !important; }
+        .font-mono { font-family: var(--font-code) !important; }
+        
+        /* Ensure inputs and buttons also use the font */
+        input, button, select, textarea { font-family: var(--font-ui) !important; }
+      `}</style>
+
+      <PacketInspector packet={selectedPacket} onClose={() => setSelectedPacket(null)} darkMode={darkMode} />
+
       {tutorialMode && (
         <div
           ref={tutorialWidgetRef}
@@ -1053,7 +874,6 @@ export default function FirewallSimulator() {
             >
               <div className="flex items-center gap-2 font-bold">
                 <Move className="w-4 h-4 text-blue-200" />
-                <GraduationCap className="w-5 h-5 text-white" />
                 Paso {currentStep} de {TUTORIAL_STEPS.length - 1}
               </div>
               <button onClick={skipTutorial} className="text-blue-200 hover:text-white text-xs underline">Salir</button>
@@ -1098,10 +918,9 @@ export default function FirewallSimulator() {
         </div>
       )}
 
-      {/* Modal Introducción */}
       {showIntro && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900 bg-opacity-90 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden animate-fade-in-up">
+          <div className={`rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden animate-fade-in-up ${darkMode ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`}>
             <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <Shield className="w-8 h-8 text-blue-400" />
@@ -1109,32 +928,32 @@ export default function FirewallSimulator() {
               </div>
             </div>
             <div className="p-8">
-              <p className="text-lg text-gray-600 mb-8 leading-relaxed">
-                ¿Cómo te gustaría empezar hoy?
+              <p className={`text-lg mb-8 leading-relaxed ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                Elige un modo para comenzar
               </p>
               <div className="grid md:grid-cols-2 gap-6">
                 <button
                   onClick={startTutorial}
-                  className="group relative bg-blue-50 p-6 rounded-xl border-2 border-blue-100 hover:border-blue-500 hover:shadow-lg transition-all text-left"
+                  className={`group relative p-6 rounded-xl border-2 transition-all text-left ${darkMode ? 'bg-blue-900/20 border-blue-800 hover:border-blue-500' : 'bg-blue-50 border-blue-100 hover:border-blue-500 hover:shadow-lg'}`}
                 >
                   <div className="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center mb-4 text-white group-hover:scale-110 transition-transform">
                     <GraduationCap className="w-6 h-6" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">Modo Entrenamiento</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className={`text-xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Modo Entrenamiento</h3>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     Recomendado para principiantes. Un tutorial guiado paso a paso donde aprenderás a configurar reglas básicas y proteger el servidor desde cero.
                   </p>
                 </button>
 
                 <button
                   onClick={skipTutorial}
-                  className="group relative bg-white p-6 rounded-xl border-2 border-gray-100 hover:border-gray-400 hover:shadow-lg transition-all text-left"
+                  className={`group relative p-6 rounded-xl border-2 transition-all text-left ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-gray-400' : 'bg-white border-gray-100 hover:border-gray-400 hover:shadow-lg'}`}
                 >
                   <div className="bg-gray-700 w-12 h-12 rounded-full flex items-center justify-center mb-4 text-white group-hover:scale-110 transition-transform">
                     <Activity className="w-6 h-6" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">Modo Libre</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className={`text-xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Modo Libre</h3>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     Acceso total al simulador con una configuración predeterminada. Experimenta con ataques, reglas DPI y stateful inspection a tu ritmo.
                   </p>
                 </button>
@@ -1148,7 +967,7 @@ export default function FirewallSimulator() {
       <header className="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-40">
         <div className="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-blue-400" />
+            <img src={logo} alt="Logo" className="h-[70px] w-auto object-contain" />
             <div>
               <h1 className="text-xl font-bold tracking-wide flex items-center gap-2">
                 FireWall Playground {tutorialMode && <span className="bg-blue-600 text-[10px] px-2 py-0.5 rounded text-white uppercase tracking-wider">Modo Entrenamiento</span>}
@@ -1158,7 +977,18 @@ export default function FirewallSimulator() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Auto Defense Toggle (IPS) */}
+            {/* Botón MODO OSCURO */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 transition-colors text-yellow-400 cursor-pointer"
+              title={darkMode ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            <div className="h-8 w-px bg-slate-700 mx-2 hidden md:block"></div>
+
+            {/* Boton Auto Defense (IPS) */}
             <div className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${isAutoDefense ? 'bg-orange-900 border-orange-500' : 'bg-slate-800 border-slate-700'}`}>
               <span className={`text-xs font-bold flex items-center gap-1 ${isAutoDefense ? 'text-orange-200' : 'text-gray-300'}`}>
                 <Siren className="w-3 h-3" /> IPS Mode
@@ -1175,7 +1005,6 @@ export default function FirewallSimulator() {
 
             <div className="h-8 w-px bg-slate-700 mx-2 hidden md:block"></div>
 
-            {/* RESTAURADO: Botón de Modo Stateful */}
             <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700">
               <span className="text-xs font-bold text-gray-300 flex items-center gap-1">
                 Modo Stateful
@@ -1192,7 +1021,6 @@ export default function FirewallSimulator() {
 
             <div className="h-8 w-px bg-slate-700 mx-2 hidden md:block"></div>
 
-            {/* MODIFICADO: Contenedor unificado (Estado + Botón) para que parezca "dentro del cuadro" */}
             <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-full border border-slate-700">
               <div className="flex items-center gap-2 px-3">
                 <span className="text-xs text-gray-400">Estado:</span>
@@ -1218,15 +1046,13 @@ export default function FirewallSimulator() {
             </div>
           </div>
         </div>
-
-        {/* ELIMINADO: Banner superior de ataque en curso */}
       </header>
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="container mx-auto p-4 mt-4">
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto pb-1">
+        <div className={`flex gap-2 mb-6 border-b overflow-x-auto pb-1 ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: Activity },
             { id: 'rules', label: 'Reglas & DPI', icon: Settings },
@@ -1238,12 +1064,11 @@ export default function FirewallSimulator() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 md:px-6 py-3 font-medium transition-colors border-b-2 whitespace-nowrap relative ${activeTab === tab.id
-                ? 'border-blue-600 text-blue-600 bg-blue-50'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                ? (darkMode ? 'border-blue-500 text-blue-400 bg-blue-900/20' : 'border-blue-600 text-blue-600 bg-blue-50')
+                : (darkMode ? 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-slate-800' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100')
                 }`}
             >
               <tab.icon className="w-4 h-4" /> {tab.label}
-              {/* Highlight Tutorial */}
               {tutorialMode && TUTORIAL_STEPS[currentStep].tab === tab.id && (
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping absolute top-2 right-2" />
               )}
@@ -1254,22 +1079,22 @@ export default function FirewallSimulator() {
         {/* VISTA: Dashboard */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* System Load Indicator (New Feature) */}
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col gap-2">
+            {/* System Load */}
+            <div className={`p-4 rounded-lg shadow border flex flex-col gap-2 ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
               <div className="flex justify-between items-center">
-                <h3 className="text-sm font-bold text-gray-600 flex items-center gap-2">
+                <h3 className={`text-sm font-bold flex items-center gap-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   <Cpu className="w-4 h-4" /> Carga del Sistema (CPU Load)
                   <EduTooltip text="Indica cuánto esfuerzo está haciendo el firewall. Si llega al 100%, el sistema colapsa. Las reglas 'DROP' explícitas al inicio reducen la carga. La política por defecto consume más CPU." />
                 </h3>
-                <span className={`text-sm font-bold ${systemLoad > 90 ? 'text-red-600 animate-pulse' : 'text-gray-600'}`}>{systemLoad}%</span>
+                <span className={`text-sm font-bold ${systemLoad > 90 ? 'text-red-600 animate-pulse' : (darkMode ? 'text-gray-300' : 'text-gray-600')}`}>{systemLoad}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+              <div className={`w-full rounded-full h-4 overflow-hidden ${darkMode ? 'bg-slate-700' : 'bg-gray-200'}`}>
                 <div
                   className={`h-full transition-all duration-300 ${systemLoad > 90 ? 'bg-red-600' : systemLoad > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
                   style={{ width: `${systemLoad}%` }}
                 ></div>
               </div>
-              {systemLoad > 90 && <p className="text-xs text-red-600 font-bold mt-1">⚠️ PELIGRO: Carga crítica. El firewall podría dejar de responder. Activa el IPS o crea reglas de bloqueo explícitas.</p>}
+              {systemLoad > 90 && <p className="text-xs text-red-600 font-bold mt-1">PELIGRO: Carga crítica. Activa el IPS o crea reglas de bloqueo explícitas.</p>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1286,8 +1111,8 @@ export default function FirewallSimulator() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                <h3 className="text-lg font-bold mb-4 text-gray-700">Top IPs de Origen (Recientes)</h3>
+              <div className={`p-6 rounded-lg shadow border ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Top IPs de Origen (Recientes)</h3>
                 <div className="space-y-2">
                   {Object.entries(logs.reduce((acc, log) => {
                     acc[log.sourceIP] = (acc[log.sourceIP] || 0) + 1;
@@ -1296,21 +1121,21 @@ export default function FirewallSimulator() {
                     .sort(([, a], [, b]) => b - a)
                     .slice(0, 5)
                     .map(([ip, count], idx) => (
-                      <div key={ip} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <div key={ip} className={`flex justify-between items-center p-2 rounded ${darkMode ? 'bg-slate-800' : 'bg-gray-50'}`}>
                         <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">{idx + 1}</span>
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${darkMode ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-600'}`}>{idx + 1}</span>
                           <span className="font-mono text-sm">{ip}</span>
                         </div>
-                        <span className="text-xs font-bold bg-gray-200 px-2 py-1 rounded text-gray-600">{count} pkt</span>
+                        <span className={`text-xs font-bold px-2 py-1 rounded ${darkMode ? 'bg-slate-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>{count} pkt</span>
                       </div>
                     ))}
                   {logs.length === 0 && <p className="text-gray-400 italic text-center">Sin datos. Inicia la simulación.</p>}
                 </div>
               </div>
 
-              {/* LISTA DE BLOQUEOS IPS (REEMPLAZA A TIPOS DE TRÁFICO) */}
-              <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                <h3 className="text-lg font-bold mb-4 text-gray-700 flex items-center gap-2">
+              {/* LISTA DE BLOQUEOS IPS */}
+              <div className={`p-6 rounded-lg shadow border ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                   <Siren className="w-5 h-5 text-red-600" />
                   Bloqueos Activos IPS (TTL 10s)
                 </h3>
@@ -1319,17 +1144,17 @@ export default function FirewallSimulator() {
                     rules.filter(r => r.name.startsWith('[IPS]')).map(rule => {
                       const remaining = Math.max(0, Math.ceil((rule.expiresAt - timeNow) / 1000));
                       return (
-                        <div key={rule.id} className="flex justify-between items-center p-2 bg-red-50 border border-red-100 rounded text-xs animate-fade-in">
+                        <div key={rule.id} className={`flex justify-between items-center p-2 rounded text-xs animate-fade-in ${darkMode ? 'bg-red-900/20 border border-red-900' : 'bg-red-50 border border-red-100'}`}>
                           <div className="flex items-center gap-2">
                             <Shield className="w-3 h-3 text-red-600" />
                             <div>
-                              <span className="font-bold text-red-800 block">{rule.name.replace('[IPS] Auto-Block ', '')}</span>
+                              <span className={`font-bold block ${darkMode ? 'text-red-300' : 'text-red-800'}`}>{rule.name.replace('[IPS] Auto-Block ', '')}</span>
                               <span className="text-[10px] text-red-400">Expiración automática</span>
                             </div>
                           </div>
                           <div className="flex flex-col items-end">
-                            <span className="text-gray-600 font-mono font-bold">{remaining}s</span>
-                            <div className="w-16 bg-red-200 rounded-full h-1 mt-1">
+                            <span className={`font-mono font-bold ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{remaining}s</span>
+                            <div className={`w-16 rounded-full h-1 mt-1 ${darkMode ? 'bg-red-900' : 'bg-red-200'}`}>
                               <div className="bg-red-600 h-1 rounded-full transition-all duration-1000" style={{ width: `${(remaining / 10) * 100}%` }}></div>
                             </div>
                           </div>
@@ -1352,19 +1177,19 @@ export default function FirewallSimulator() {
         {/* VISTA: Reglas */}
         {activeTab === 'rules' && (
           <div className="space-y-6">
-            <div className={`bg-white p-6 rounded-lg shadow border transition-all duration-300 ${tutorialMode && currentStep === 1 ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}>
+            <div className={`p-6 rounded-lg shadow border transition-all duration-300 ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'} ${tutorialMode && currentStep === 1 ? 'border-blue-500 ring-2 ring-blue-200' : ''}`}>
 
               {/* HEADER: Política por defecto + Gestión de Escenarios */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b gap-4">
+              <div className={`flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b gap-4 ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                  <h3 className={`text-lg font-bold flex items-center ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                     Gestión de Reglas
                   </h3>
-                  <p className="text-sm text-gray-500">Define el comportamiento y guarda tus escenarios.</p>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Define el comportamiento y guarda tus escenarios.</p>
                 </div>
 
                 <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
-                  {/* NUEVO: Botones de Guardar/Cargar */}
+                  {/* Botones de Guardar/Cargar */}
                   <div className="flex gap-2">
                     <input
                       type="file"
@@ -1376,14 +1201,14 @@ export default function FirewallSimulator() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current.click()}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs font-bold transition-colors border border-gray-300"
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold transition-colors border ${darkMode ? 'bg-slate-800 border-slate-600 text-gray-300 hover:bg-slate-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300'}`}
                     >
                       <Upload size={14} /> Cargar
                     </button>
                     <button
                       type="button"
                       onClick={handleSaveConfig}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-bold transition-colors border border-blue-200"
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold transition-colors border ${darkMode ? 'bg-blue-900/30 border-blue-800 text-blue-300 hover:bg-blue-900/50' : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'}`}
                     >
                       <Save size={14} /> Guardar
                     </button>
@@ -1393,15 +1218,15 @@ export default function FirewallSimulator() {
 
                   {/* Política por Defecto */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-500 uppercase">Política Default:</span>
-                    <div className="flex items-center bg-gray-100 p-1 rounded-lg">
+                    <span className={`text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Política Default:</span>
+                    <div className={`flex items-center p-1 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-gray-100'}`}>
                       {ACTIONS.map(action => (
                         <button
                           key={action}
                           onClick={() => setDefaultPolicy(action)}
                           className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${defaultPolicy === action
                             ? (action === 'ACCEPT' ? 'bg-green-500 text-white' : 'bg-red-500 text-white')
-                            : 'text-gray-500 hover:bg-gray-200'
+                            : (darkMode ? 'text-gray-400 hover:bg-slate-700' : 'text-gray-500 hover:bg-gray-200')
                             }`}
                         >
                           {action}
@@ -1414,7 +1239,7 @@ export default function FirewallSimulator() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-100 text-gray-600 uppercase">
+                  <thead className={`${darkMode ? 'bg-slate-800 text-gray-300' : 'bg-gray-100 text-gray-600'} uppercase`}>
                     <tr>
                       <th className="p-3 w-16">
                         <div className="flex items-center">
@@ -1431,9 +1256,9 @@ export default function FirewallSimulator() {
                       <th className="p-3 text-right">Control</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className={`divide-y ${darkMode ? 'divide-slate-800' : 'divide-gray-100'}`}>
                     {rules.map((rule, index) => (
-                      <tr key={rule.id} className="hover:bg-gray-50">
+                      <tr key={rule.id} className={`${darkMode ? 'hover:bg-slate-800' : 'hover:bg-gray-50'}`}>
                         <td className="p-3 font-bold text-gray-400">{index + 1}</td>
                         <td className="p-3 font-medium">
                           {rule.name.startsWith('[IPS]') ?
@@ -1466,41 +1291,41 @@ export default function FirewallSimulator() {
               </div>
             </div>
 
-            <div className={`bg-blue-50 p-6 rounded-lg border transition-all duration-300 ${tutorialMode && (currentStep === 2 || currentStep === 6 || currentStep === 7) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-blue-100'}`}>
-              <h3 className="text-md font-bold text-blue-800 mb-4 flex items-center gap-2">
+            <div className={`p-6 rounded-lg border transition-all duration-300 ${darkMode ? 'bg-blue-900/10 border-blue-900' : 'bg-blue-50 border-blue-100'} ${tutorialMode && (currentStep === 2 || currentStep === 6 || currentStep === 7) ? 'border-blue-500 ring-4 ring-blue-100' : ''}`}>
+              <h3 className={`text-md font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>
                 <Plus className="w-4 h-4" /> Añadir Nueva Regla
                 <EduTooltip text="Define los criterios específicos. Un asterisco (*) significa 'cualquiera'. Usa 'Contenido' para filtrar payloads específicos." />
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end">
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-blue-800 mb-1">Nombre</label>
-                  <input type="text" placeholder="Ej: Bloquear SQL" className="w-full p-2 border rounded text-sm" value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>Nombre</label>
+                  <input type="text" placeholder="Ej: Bloquear SQL" className={`w-full p-2 border rounded text-sm ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : ''}`} value={newRule.name} onChange={e => setNewRule({ ...newRule, name: e.target.value })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-blue-800 mb-1">IP Origen</label>
-                  <input type="text" placeholder="*" className="w-full p-2 border rounded text-sm font-mono" value={newRule.sourceIP} onChange={e => setNewRule({ ...newRule, sourceIP: e.target.value })} />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>IP Origen</label>
+                  <input type="text" placeholder="*" className={`w-full p-2 border rounded text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : ''}`} value={newRule.sourceIP} onChange={e => setNewRule({ ...newRule, sourceIP: e.target.value })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-blue-800 mb-1">Proto</label>
-                  <select className="w-full p-2 border rounded text-sm" value={newRule.protocol} onChange={e => setNewRule({ ...newRule, protocol: e.target.value })}>
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>Proto</label>
+                  <select className={`w-full p-2 border rounded text-sm ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : ''}`} value={newRule.protocol} onChange={e => setNewRule({ ...newRule, protocol: e.target.value })}>
                     <option value="*">Todos</option>
                     {PROTOCOLS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-blue-800 mb-1">Puerto</label>
-                  <input type="text" placeholder="*" className="w-full p-2 border rounded text-sm font-mono" value={newRule.port} onChange={e => setNewRule({ ...newRule, port: e.target.value })} />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>Puerto</label>
+                  <input type="text" placeholder="*" className={`w-full p-2 border rounded text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : ''}`} value={newRule.port} onChange={e => setNewRule({ ...newRule, port: e.target.value })} />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-blue-800 mb-1 flex items-center gap-1">
+                  <label className={`block text-xs font-bold mb-1 flex items-center gap-1 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>
                     Contenido (DPI)
                     <EduTooltip text="Inspección Profunda de Paquetes. Escribe una palabra clave (ej: 'SELECT') para bloquear paquetes que la contengan." />
                   </label>
-                  <input type="text" placeholder="Ej: DROP TABLE" className="w-full p-2 border rounded text-sm font-mono border-orange-200 bg-orange-50" value={newRule.content} onChange={e => setNewRule({ ...newRule, content: e.target.value })} />
+                  <input type="text" placeholder="Ej: DROP TABLE" className={`w-full p-2 border rounded text-sm font-mono ${darkMode ? 'bg-slate-800 border-orange-900 text-orange-200' : 'border-orange-200 bg-orange-50'}`} value={newRule.content} onChange={e => setNewRule({ ...newRule, content: e.target.value })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-blue-800 mb-1">Acción</label>
-                  <select className="w-full p-2 border rounded text-sm font-bold" value={newRule.action} onChange={e => setNewRule({ ...newRule, action: e.target.value })}>
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-blue-300' : 'text-blue-800'}`}>Acción</label>
+                  <select className={`w-full p-2 border rounded text-sm font-bold ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : ''}`} value={newRule.action} onChange={e => setNewRule({ ...newRule, action: e.target.value })}>
                     {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
@@ -1515,13 +1340,13 @@ export default function FirewallSimulator() {
         {/* VISTA: Tabla de Estados */}
         {activeTab === 'state' && (
           <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+            <div className={`p-6 rounded-lg shadow border ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <h3 className={`text-xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                     <RefreshCw className="w-5 h-5 text-purple-600" /> Tabla de Conexiones Activas
                   </h3>
-                  <p className="text-sm text-gray-500">
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     {isStateful
                       ? "Estas conexiones están 'establecidas'. El tráfico de retorno se permitirá automáticamente."
                       : "El modo Stateful está DESACTIVADO. Esta tabla estará vacía y no se recordarán conexiones."}
@@ -1534,7 +1359,7 @@ export default function FirewallSimulator() {
               </div>
 
               {!isStateful && (
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded text-yellow-800 text-sm mb-4 flex items-center gap-2">
+                <div className={`p-4 rounded text-sm mb-4 flex items-center gap-2 border ${darkMode ? 'bg-yellow-900/20 border-yellow-900 text-yellow-200' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
                   <AlertTriangle className="w-4 h-4" />
                   Activa el "Modo Stateful" en la barra superior para ver cómo se rellena esta tabla.
                 </div>
@@ -1542,7 +1367,7 @@ export default function FirewallSimulator() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-100 text-gray-600 uppercase">
+                  <thead className={`uppercase ${darkMode ? 'bg-slate-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
                     <tr>
                       <th className="p-3">Inicio</th>
                       <th className="p-3">Origen</th>
@@ -1552,16 +1377,16 @@ export default function FirewallSimulator() {
                       <th className="p-3">TTL</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 font-mono text-xs">
+                  <tbody className={`divide-y font-mono text-xs ${darkMode ? 'divide-slate-800' : 'divide-gray-100'}`}>
                     {connections.map((conn) => (
-                      <tr key={conn.id} className="hover:bg-purple-50 transition-colors">
-                        <td className="p-3 text-gray-500">{conn.startTime}</td>
-                        <td className="p-3 text-gray-800 font-bold">{conn.sourceIP}</td>
-                        <td className="p-3 text-gray-800">{conn.destIP}</td>
-                        <td className="p-3 text-purple-600 font-bold">{conn.protocol}</td>
-                        <td className="p-3 text-gray-500">{conn.srcPort} : {conn.destPort}</td>
+                      <tr key={conn.id} className={`transition-colors ${darkMode ? 'hover:bg-slate-800 text-gray-300' : 'hover:bg-purple-50'}`}>
+                        <td className={`p-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{conn.startTime}</td>
+                        <td className={`p-3 font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{conn.sourceIP}</td>
+                        <td className={`p-3 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{conn.destIP}</td>
+                        <td className={`p-3 font-bold ${darkMode ? 'text-purple-400' : 'text-purple-600'}`}>{conn.protocol}</td>
+                        <td className={`p-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{conn.srcPort} : {conn.destPort}</td>
                         <td className="p-3">
-                          <div className="w-full bg-gray-200 rounded-full h-2.5 max-w-[100px]">
+                          <div className={`w-full rounded-full h-2.5 max-w-[100px] ${darkMode ? 'bg-slate-700' : 'bg-gray-200'}`}>
                             <div className="bg-green-500 h-2.5 rounded-full transition-all duration-1000" style={{ width: `${(conn.ttl / 15) * 100}%` }}></div>
                           </div>
                           <span className="text-[10px] text-gray-400">{conn.ttl}s</span>
@@ -1582,25 +1407,24 @@ export default function FirewallSimulator() {
           </div>
         )}
 
-        {/* VISTA: Logs */}
+        {/* Logs */}
         {activeTab === 'logs' && (
           <div className="space-y-4">
-            {/* ELIMINADO: Mensaje de alerta en la sección de logs */}
 
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
+              <h3 className={`text-lg font-bold flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                 Registro de Tráfico
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-normal">Doble clic para inspeccionar</span>
+                <span className={`text-xs px-2 py-1 rounded font-normal ${darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>Doble clic para inspeccionar</span>
               </h3>
-              <button onClick={downloadCSV} className="flex items-center gap-2 text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1.5 rounded text-gray-700 transition-colors">
+              <button onClick={downloadCSV} className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded transition-colors ${darkMode ? 'bg-slate-700 hover:bg-slate-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>
                 <Download className="w-4 h-4" /> Exportar CSV
               </button>
             </div>
 
-            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+            <div className={`rounded-lg shadow border overflow-hidden ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
               <div className="overflow-y-auto max-h-[500px]">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-gray-500 sticky top-0 shadow-sm">
+                  <thead className={`sticky top-0 shadow-sm ${darkMode ? 'bg-slate-800 text-gray-400' : 'bg-gray-50 text-gray-500'}`}>
                     <tr>
                       <th className="p-3">Hora</th>
                       <th className="p-3">Origen</th>
@@ -1611,41 +1435,41 @@ export default function FirewallSimulator() {
                       <th className="p-3">Regla</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 font-mono text-xs">
+                  <tbody className={`divide-y font-mono text-xs ${darkMode ? 'divide-slate-800' : 'divide-gray-100'}`}>
                     {logs.map((log) => (
                       <tr
                         key={log.id}
                         onDoubleClick={() => setSelectedPacket(log)}
-                        className={`cursor-pointer hover:bg-gray-100 transition-colors ${log.isStatefulMatch ? 'bg-purple-50' : log.attackType ? 'bg-red-50' : ''}`}
+                        className={`cursor-pointer transition-colors ${log.isStatefulMatch ? (darkMode ? 'bg-purple-900/10' : 'bg-purple-50') : log.attackType ? (darkMode ? 'bg-red-900/10' : 'bg-red-50') : (darkMode ? 'hover:bg-slate-800' : 'hover:bg-gray-100')}`}
                         title="Doble clic para inspeccionar paquete"
                       >
-                        <td className="p-3 text-gray-500">{log.timestamp}</td>
-                        <td className="p-3 text-gray-700">
+                        <td className={`p-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{log.timestamp}</td>
+                        <td className={`p-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                           {log.sourceIP}
                           {log.attackType && <div className="text-[9px] font-bold text-red-500 uppercase">{log.attackType}</div>}
                         </td>
                         <td className="p-3">
-                          <span className={`px-1.5 py-0.5 rounded border ${log.protocol === 'TCP' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                            log.protocol === 'UDP' ? 'bg-orange-50 text-orange-600 border-orange-200' :
-                              'bg-gray-100 text-gray-600 border-gray-300'
+                          <span className={`px-1.5 py-0.5 rounded border ${log.protocol === 'TCP' ? (darkMode ? 'bg-blue-900/20 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-600 border-blue-200') :
+                            log.protocol === 'UDP' ? (darkMode ? 'bg-orange-900/20 text-orange-300 border-orange-800' : 'bg-orange-50 text-orange-600 border-orange-200') :
+                              (darkMode ? 'bg-slate-800 text-gray-400 border-slate-600' : 'bg-gray-100 text-gray-600 border-gray-300')
                             }`}>
                             {log.protocol}
                           </span>
                         </td>
-                        <td className="p-3 font-bold text-gray-600">{log.destPort}</td>
-                        <td className="p-3 truncate max-w-[200px]">
-                          {log.isReturnTraffic && <span className="text-[10px] bg-gray-200 px-1 rounded mr-1">RESPUESTA</span>}
-                          <span className={log.attackType ? 'text-red-600 font-bold' : 'text-gray-500'}>
+                        <td className={`p-3 font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{log.destPort}</td>
+                        <td className={`p-3 truncate max-w-[200px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {log.isReturnTraffic && <span className={`text-[10px] px-1 rounded mr-1 ${darkMode ? 'bg-slate-700' : 'bg-gray-200'}`}>RESPUESTA</span>}
+                          <span className={log.attackType ? (darkMode ? 'text-red-400 font-bold' : 'text-red-600 font-bold') : ''}>
                             {log.payload || (log.flags ? `Flags: ${log.flags}` : '-')}
                           </span>
                         </td>
                         <td className="p-3">
-                          <span className={`font-bold ${log.action === 'ACCEPT' ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`font-bold ${log.action === 'ACCEPT' ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-red-400' : 'text-red-600')}`}>
                             {log.action}
                           </span>
                         </td>
-                        <td className="p-3 text-gray-500 truncate max-w-[150px]" title={log.ruleName}>
-                          {log.isStatefulMatch && <RefreshCw className="w-3 h-3 inline mr-1 text-purple-600" />}
+                        <td className={`p-3 truncate max-w-[150px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} title={log.ruleName}>
+                          {log.isStatefulMatch && <RefreshCw className={`w-3 h-3 inline mr-1 ${darkMode ? 'text-purple-400' : 'text-purple-600'}`} />}
                           {log.ruleName}
                         </td>
                       </tr>
@@ -1658,75 +1482,75 @@ export default function FirewallSimulator() {
           </div>
         )}
 
-        {/* VISTA: Simulador de Ataques / Inyección */}
+        {/* Simulador de Ataques / Inyección */}
         {activeTab === 'simulate' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
             {/* Panel de Inyección Manual */}
-            <div className="bg-white p-8 rounded-lg shadow-lg border border-gray-200">
-              <h3 className="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+            <div className={`p-8 rounded-lg shadow-lg border ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
+              <h3 className={`text-xl font-bold mb-2 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                 <Activity className="w-5 h-5 text-blue-600" /> Inyección Manual
                 <EduTooltip text="Crea un paquete a medida para probar tus reglas." />
               </h3>
-              <p className="text-sm text-gray-500 mb-6">Configura y envía un único paquete.</p>
+              <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Configura y envía un único paquete.</p>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">IP Origen</label>
-                  <input type="text" value={manualPacket.sourceIP} onChange={e => setManualPacket({ ...manualPacket, sourceIP: e.target.value })} className="w-full p-2 border rounded bg-gray-50 font-mono text-xs" />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>IP Origen</label>
+                  <input type="text" value={manualPacket.sourceIP} onChange={e => setManualPacket({ ...manualPacket, sourceIP: e.target.value })} className={`w-full p-2 border rounded font-mono text-xs ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : 'bg-gray-50'}`} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">IP Destino</label>
-                  <input type="text" value={manualPacket.destIP} onChange={e => setManualPacket({ ...manualPacket, destIP: e.target.value })} className="w-full p-2 border rounded bg-gray-50 font-mono text-xs" />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>IP Destino</label>
+                  <input type="text" value={manualPacket.destIP} onChange={e => setManualPacket({ ...manualPacket, destIP: e.target.value })} className={`w-full p-2 border rounded font-mono text-xs ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : 'bg-gray-50'}`} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Protocolo</label>
-                  <select value={manualPacket.protocol} onChange={e => setManualPacket({ ...manualPacket, protocol: e.target.value })} className="w-full p-2 border rounded bg-gray-50 text-xs">
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Protocolo</label>
+                  <select value={manualPacket.protocol} onChange={e => setManualPacket({ ...manualPacket, protocol: e.target.value })} className={`w-full p-2 border rounded text-xs ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : 'bg-gray-50'}`}>
                     {PROTOCOLS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Puerto Dest.</label>
-                  <input type="number" value={manualPacket.destPort} onChange={e => setManualPacket({ ...manualPacket, destPort: e.target.value })} className="w-full p-2 border rounded bg-gray-50 font-mono text-xs" />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Puerto Dest.</label>
+                  <input type="number" value={manualPacket.destPort} onChange={e => setManualPacket({ ...manualPacket, destPort: e.target.value })} className={`w-full p-2 border rounded font-mono text-xs ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : 'bg-gray-50'}`} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Payload (Contenido)</label>
-                  <input type="text" placeholder="Ej: SELECT * FROM..." value={manualPacket.payload} onChange={e => setManualPacket({ ...manualPacket, payload: e.target.value })} className="w-full p-2 border rounded bg-gray-50 font-mono text-xs" />
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Payload (Contenido)</label>
+                  <input type="text" placeholder="Ej: SELECT * FROM..." value={manualPacket.payload} onChange={e => setManualPacket({ ...manualPacket, payload: e.target.value })} className={`w-full p-2 border rounded font-mono text-xs ${darkMode ? 'bg-slate-800 border-slate-600 text-white' : 'bg-gray-50'}`} />
                 </div>
               </div>
               <button onClick={handleManualInject} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded shadow text-sm">Enviar Paquete Único</button>
             </div>
 
-            {/* Panel de Amenazas */}
-            <div className="bg-slate-50 p-8 rounded-lg shadow-inner border border-slate-200">
-              <h3 className="text-xl font-bold text-red-800 mb-2 flex items-center gap-2">
+            {/* Panel de Ataques */}
+            <div className={`p-8 rounded-lg shadow-inner border ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <h3 className={`text-xl font-bold mb-2 flex items-center gap-2 ${darkMode ? 'text-red-400' : 'text-red-800'}`}>
                 <Zap className="w-5 h-5 text-red-600" /> Generador de Ciberamenazas
                 <EduTooltip text="Lanza ataques continuos para ver si tu firewall aguanta la carga." />
               </h3>
-              <p className="text-sm text-gray-600 mb-6">Selecciona un vector de ataque para simular tráfico hostil continuo.</p>
+              <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Selecciona un vector de ataque para simular tráfico hostil continuo.</p>
 
               <div className="space-y-4">
-                <div className={`p-4 rounded border cursor-pointer transition-all ${attackMode === ATTACK_TYPES.SQL_INJECTION ? 'bg-red-100 border-red-500 shadow-md' : 'bg-white border-gray-200 hover:border-red-300'}`} onClick={() => toggleAttack(ATTACK_TYPES.SQL_INJECTION)}>
+                <div className={`p-4 rounded border cursor-pointer transition-all ${attackMode === ATTACK_TYPES.SQL_INJECTION ? (darkMode ? 'bg-red-900/30 border-red-500' : 'bg-red-100 border-red-500 shadow-md') : (darkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-gray-200 hover:border-red-300')}`} onClick={() => toggleAttack(ATTACK_TYPES.SQL_INJECTION)}>
                   <div className="flex justify-between items-center mb-1">
-                    <h4 className="font-bold text-gray-800 flex items-center gap-2"><Database className="w-4 h-4" /> SQL Injection Attack</h4>
+                    <h4 className={`font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}><Database className="w-4 h-4" /> SQL Injection Attack</h4>
                     {attackMode === ATTACK_TYPES.SQL_INJECTION && <span className="text-xs font-bold text-red-600 animate-pulse">ACTIVO</span>}
                   </div>
-                  <p className="text-xs text-gray-500">Intenta inyectar comandos SQL (ej: <code>' OR '1'='1'</code>) en el puerto 80. Requiere reglas DPI para bloquear.</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Intenta inyectar comandos SQL (ej: <code>' OR '1'='1'</code>) en el puerto 80. Requiere reglas DPI para bloquear.</p>
                 </div>
 
-                <div className={`p-4 rounded border cursor-pointer transition-all ${attackMode === ATTACK_TYPES.DDoS_UDP ? 'bg-red-100 border-red-500 shadow-md' : 'bg-white border-gray-200 hover:border-red-300'}`} onClick={() => toggleAttack(ATTACK_TYPES.DDoS_UDP)}>
+                <div className={`p-4 rounded border cursor-pointer transition-all ${attackMode === ATTACK_TYPES.DDoS_UDP ? (darkMode ? 'bg-red-900/30 border-red-500' : 'bg-red-100 border-red-500 shadow-md') : (darkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-gray-200 hover:border-red-300')}`} onClick={() => toggleAttack(ATTACK_TYPES.DDoS_UDP)}>
                   <div className="flex justify-between items-center mb-1">
-                    <h4 className="font-bold text-gray-800 flex items-center gap-2"><Globe className="w-4 h-4" /> DDoS UDP Flood</h4>
+                    <h4 className={`font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}><Globe className="w-4 h-4" /> DDoS UDP Flood</h4>
                     {attackMode === ATTACK_TYPES.DDoS_UDP && <span className="text-xs font-bold text-red-600 animate-pulse">ACTIVO</span>}
                   </div>
-                  <p className="text-xs text-gray-500">Inunda el puerto 53 (DNS) con tráfico UDP basura desde múltiples IPs. Genera mucho volumen.</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Inunda el puerto 53 (DNS) con tráfico UDP basura desde múltiples IPs. Genera mucho volumen.</p>
                 </div>
 
-                <div className={`p-4 rounded border cursor-pointer transition-all ${attackMode === ATTACK_TYPES.SYN_FLOOD ? 'bg-red-100 border-red-500 shadow-md' : 'bg-white border-gray-200 hover:border-red-300'}`} onClick={() => toggleAttack(ATTACK_TYPES.SYN_FLOOD)}>
+                <div className={`p-4 rounded border cursor-pointer transition-all ${attackMode === ATTACK_TYPES.SYN_FLOOD ? (darkMode ? 'bg-red-900/30 border-red-500' : 'bg-red-100 border-red-500 shadow-md') : (darkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-gray-200 hover:border-red-300')}`} onClick={() => toggleAttack(ATTACK_TYPES.SYN_FLOOD)}>
                   <div className="flex justify-between items-center mb-1">
-                    <h4 className="font-bold text-gray-800 flex items-center gap-2"><Activity className="w-4 h-4" /> TCP SYN Flood</h4>
+                    <h4 className={`font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}><Activity className="w-4 h-4" /> TCP SYN Flood</h4>
                     {attackMode === ATTACK_TYPES.SYN_FLOOD && <span className="text-xs font-bold text-red-600 animate-pulse">ACTIVO</span>}
                   </div>
-                  <p className="text-xs text-gray-500">Envía miles de solicitudes de conexión (SYN) sin completarlas para agotar la tabla de estados.</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Envía miles de solicitudes de conexión (SYN) sin completarlas para agotar la tabla de estados.</p>
                 </div>
               </div>
 

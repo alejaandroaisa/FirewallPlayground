@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { AuthContext } from './context/AuthContext';
 import {
   Shield, Play, Pause, Plus, Trash2, ArrowUp, ArrowDown, Activity,
   FileText, Download, AlertTriangle, Settings, HelpCircle, RefreshCw,
   Zap, Database, Globe, CheckCircle, X, Layers, Binary, GraduationCap,
-  ChevronRight, Move, Cpu, Siren, Clock, Save, Upload, Moon, Sun
+  ChevronRight, Move, Cpu, Siren, Clock, Save, Upload, Moon, Sun, ArrowLeft
 } from 'lucide-react';
 
 // IMPORTACIÓN DE UTILIDADES Y DATOS
@@ -345,6 +347,21 @@ const PacketInspector = ({ packet, onClose, darkMode }) => {
 //Componente Principal
 
 export default function FirewallSimulator() {
+
+  const { roomId } = useParams(); // Obtenemos el ID de la sala si existe en la URL
+  const { token, user } = useContext(AuthContext); // Obtenemos la sesión del usuario
+  const navigate = useNavigate();
+
+  const handleBackToDashboard = () => {
+    if (!user) {
+      navigate('/login');
+    } else if (user.role === 'TEACHER') {
+      navigate('/teacher-dashboard');
+    } else {
+      navigate('/student-dashboard');
+    }
+  };
+
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [defaultPolicy, setDefaultPolicy] = useState('DROP');
@@ -399,6 +416,22 @@ export default function FirewallSimulator() {
   const [manualPacket, setManualPacket] = useState({
     sourceIP: '1.2.3.4', destIP: '10.0.0.5', protocol: 'TCP', destPort: '80', payload: ''
   });
+
+  useEffect(() => {
+    if (roomId && token) {
+      fetch(`http://localhost:3001/api/rooms/${roomId}/config`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.rules) setRules(data.rules);
+          if (data.defaultPolicy) setDefaultPolicy(data.defaultPolicy);
+          if (data.isStateful !== undefined) setIsStateful(data.isStateful);
+          if (data.isAutoDefense !== undefined) setIsAutoDefense(data.isAutoDefense);
+        })
+        .catch(err => console.error("Error cargando sala:", err));
+    }
+  }, [roomId, token]);
 
   const stateRef = useRef({
     rules, defaultPolicy, isStateful, connections, attackMode, isAutoDefense
@@ -732,21 +765,40 @@ export default function FirewallSimulator() {
     setRules(newRules);
   };
 
-  const handleSaveConfig = (e) => {
+  const handleSaveConfig = async (e) => {
     if (e) e.preventDefault();
-    const config = {
-      rules,
-      defaultPolicy,
-      isStateful,
-      isAutoDefense
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "firewall_scenario.json");
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
+    const config = { rules, defaultPolicy, isStateful, isAutoDefense };
+
+    // Si estamos dentro de una sala específica Y somos profesores -> Guardamos en la BD
+    if (roomId && token && user?.role === 'TEACHER') {
+      try {
+        const res = await fetch(`http://localhost:3001/api/rooms/${roomId}/config`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ configuration: config })
+        });
+        if (res.ok) {
+          alert("✅ Configuración de la sala guardada en la Nube correctamente.");
+        } else {
+          alert("Error al guardar la configuración.");
+        }
+      } catch (err) {
+        console.error("Error de conexión:", err);
+      }
+    }
+    // Si estamos en modo libre (sin sala) -> Comportamiento original (Descargar JSON)
+    else {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", "firewall_scenario.json");
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+    }
   };
 
   const handleLoadConfig = (event) => {
@@ -964,10 +1016,22 @@ export default function FirewallSimulator() {
       )}
 
       {/* Header */}
+      {/* Header */}
       <header className="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-40">
         <div className="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="Logo" className="h-[70px] w-auto object-contain" />
+          <div className="flex items-center gap-4">
+
+            {/* --- NUEVO BOTÓN DE VOLVER --- */}
+            <button
+              onClick={handleBackToDashboard}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-gray-300 hover:text-white transition-colors border border-slate-700 flex items-center justify-center group"
+              title="Volver al Panel"
+            >
+              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+            </button>
+            {/* ----------------------------- */}
+
+            <img src={logo} alt="Logo" className="h-[70px] w-auto object-contain hidden sm:block" />
             <div>
               <h1 className="text-xl font-bold tracking-wide flex items-center gap-2">
                 FireWall Playground {tutorialMode && <span className="bg-blue-600 text-[10px] px-2 py-0.5 rounded text-white uppercase tracking-wider">Modo Entrenamiento</span>}
@@ -1083,8 +1147,8 @@ export default function FirewallSimulator() {
             <div className={`p-4 rounded-lg shadow border flex flex-col gap-2 ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
               <div className="flex justify-between items-center">
                 <h3 className={`text-sm font-bold flex items-center gap-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                  <Cpu className="w-4 h-4" /> Carga del Sistema (CPU Load)
-                  <EduTooltip text="Indica cuánto esfuerzo está haciendo el firewall. Si llega al 100%, el sistema colapsa. Las reglas 'DROP' explícitas al inicio reducen la carga. La política por defecto consume más CPU." />
+                  <h3 className="w-4 h-4" /> Carga del Sistema (CPU Load)
+                  <EduTooltip text="Indica cuánto esfuerzo está haciendo el firewall. Si llega al 100%, el sistema colapsaría. Las reglas 'DROP' explícitas al inicio reducen la carga. La política por defecto consume más CPU." />
                 </h3>
                 <span className={`text-sm font-bold ${systemLoad > 90 ? 'text-red-600 animate-pulse' : (darkMode ? 'text-gray-300' : 'text-gray-600')}`}>{systemLoad}%</span>
               </div>
@@ -1136,8 +1200,7 @@ export default function FirewallSimulator() {
               {/* LISTA DE BLOQUEOS IPS */}
               <div className={`p-6 rounded-lg shadow border ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'}`}>
                 <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                  <Siren className="w-5 h-5 text-red-600" />
-                  Bloqueos Activos IPS (TTL 10s)
+                  <h3 className="w-5 h-5 text-red-600" />Bloqueos Activos IPS (TTL 10s)
                 </h3>
                 <div className="space-y-2 overflow-y-auto max-h-64">
                   {rules.filter(r => r.name.startsWith('[IPS]')).length > 0 ? (
